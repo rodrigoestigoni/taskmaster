@@ -5,7 +5,6 @@ import {
   Bars3Icon,
   XMarkIcon,
   HomeIcon,
-  CalendarDayIcon,
   CalendarIcon,
   ChartBarIcon,
   Cog6ToothIcon,
@@ -20,7 +19,7 @@ import { useTheme } from '../../context/ThemeContext';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Dia', href: '/day', icon: CalendarDayIcon },
+  { name: 'Dia', href: '/day', icon: CalendarIcon },
   { name: 'Semana', href: '/week', icon: CalendarIcon },
   { name: 'Mês', href: '/month', icon: CalendarIcon },
   { name: 'Metas', href: '/goals', icon: FlagIcon },

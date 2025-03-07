@@ -1,13 +1,10 @@
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-/**
- * Componente para proteger rotas que requerem autenticação
- * Redireciona para a página de login se o usuário não estiver autenticado
- */
 const PrivateRoute = () => {
   const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
   
   // Enquanto verifica a autenticação, mostrar spinner
   if (loading) {
@@ -19,8 +16,9 @@ const PrivateRoute = () => {
   }
   
   // Redirecionar para login se não estiver autenticado
+  // Preserva o caminho atual para redirecionamento após login
   if (!isAuthenticated) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
   
   // Renderizar o conteúdo da rota protegida

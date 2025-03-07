@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+const domain = window.location.hostname;
+
+const API_URL = `/taskmaster/api`;
 
 // Criar instância do axios com configuração base
 const apiClient = axios.create({

@@ -176,6 +176,15 @@ class TaskViewSet(viewsets.ModelViewSet):
             
             serializer = TaskOccurrenceSerializer(occurrence)
             return Response(serializer.data)
+        else:  # Este else está causando o problema
+            # Para tarefas não recorrentes
+            task.status = 'completed'
+            task.actual_value = actual_value
+            task.notes = notes or task.notes
+            task.save()
+            
+            serializer = self.get_serializer(task)
+            return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def report(self, request):
@@ -273,15 +282,6 @@ class TaskViewSet(viewsets.ModelViewSet):
         })
         
         return Response(serializer.data)
-        else:
-            # Para tarefas não recorrentes
-            task.status = 'completed'
-            task.actual_value = actual_value
-            task.notes = notes or task.notes
-            task.save()
-            
-            serializer = self.get_serializer(task)
-            return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):

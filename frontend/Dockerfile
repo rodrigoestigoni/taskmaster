@@ -2,11 +2,13 @@ FROM node:18-alpine as build
 
 WORKDIR /app
 
-# Instalar dependências
+# Copiar apenas package.json e package-lock.json primeiro
 COPY package.json package-lock.json* ./
-RUN npm install
 
-# Copiar o código fonte
+# Usar cache para acelerar instalações subsequentes
+RUN npm ci
+
+# Agora copie o resto do código fonte
 COPY . .
 
 # Construir para produção
