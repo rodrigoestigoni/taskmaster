@@ -1,0 +1,7 @@
+# Use LF para scripts e arquivos específicos
+*.sh text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+
+# Deixe o Git lidar com os outros arquivos
+* text=auto
