@@ -9,7 +9,7 @@ services:
       - media_volume:/app/mediafiles
       - /etc/letsencrypt:/etc/letsencrypt:ro
     ports:
-      - "8445:443"
+      - "8445:8000"
     env_file:
       - ./backend/.env
     depends_on:
@@ -44,8 +44,6 @@ services:
     depends_on:
       - backend
     container_name: taskmaster_frontend
-
-  # Demais serviços permanecem iguais
 
   db:
     image: postgres:13

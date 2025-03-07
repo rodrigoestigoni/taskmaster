@@ -21,17 +21,22 @@ RUN npm run build
 # Segunda etapa: servidor de produção
 FROM nginx:alpine
 
-# Remover todos os arquivos padrão do NGINX
-RUN rm -rf /usr/share/nginx/html/*
+# Remover todas as configurações padrão
+RUN rm -rf /etc/nginx/conf.d/* \
+    && rm -rf /usr/share/nginx/html/* 
 
 # Criar diretório para taskmaster
-RUN mkdir -p /usr/share/nginx/html/taskmaster
+RUN mkdir -p /usr/share/nginx/html/taskmaster \
+    && chmod 755 /usr/share/nginx/html/taskmaster
 
 # Copiar build do React para pasta de servir
-COPY --from=build /app/build /usr/share/nginx/html/taskmaster
+COPY --from=build /app/build /etc/nginx/html/
 
 # Copiar configuração do NGINX
-COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx/nginx.conf /etc/nginx/conf.d/taskmaster.conf
+
+# Debugging - print out contents
+RUN ls -la /etc/nginx/html/
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
