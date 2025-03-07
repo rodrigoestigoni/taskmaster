@@ -7,12 +7,14 @@ services:
       - ./backend:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/mediafiles
-    expose:
-      - 8000
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    ports:
+      - "8445:443"
     env_file:
       - ./backend/.env
     depends_on:
       - db
+    container_name: taskmaster_backend
     networks:
       - app_net
     command: >
@@ -30,15 +32,20 @@ services:
       - frontend_node_modules:/app/node_modules 
       - static_volume:/usr/share/nginx/html/taskmaster/staticfiles
       - media_volume:/usr/share/nginx/html/taskmaster/mediafiles
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     environment:
       - PUBLIC_URL=/taskmaster
       - REACT_APP_API_URL=/taskmaster/api
     ports:
       - "8081:80"
+      - "8446:443"
     networks:
       - app_net
     depends_on:
       - backend
+    container_name: taskmaster_frontend
+
+  # Demais serviços permanecem iguais
 
   db:
     image: postgres:13
@@ -72,5 +79,4 @@ volumes:
 
 networks:
   app_net:
-    external:
-      name: shared_network
+    external: true

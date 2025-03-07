@@ -34,7 +34,7 @@ import PrivateRoute from './components/auth/PrivateRoute';
 
 function App() {
     return (
-      <Router>
+      <Router basename="/taskmaster">
         <ThemeProvider>
           <AuthProvider>
             <TaskProvider>
