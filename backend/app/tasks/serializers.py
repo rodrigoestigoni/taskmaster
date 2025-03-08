@@ -58,21 +58,79 @@ class TaskSerializer(serializers.ModelSerializer):
             # Se não houver data final, gerar para os próximos 30 dias
             end_date = current_date + timedelta(days=30)
         
-        while current_date <= end_date:
-            if self._should_create_occurrence(task, current_date):
+        # Criar a primeira ocorrência para a data inicial
+        TaskOccurrence.objects.create(
+            task=task,
+            date=current_date,
+            status='pending'
+        )
+        
+        # Para padrão semanal, aumentar 7 dias para cada nova ocorrência
+        if task.repeat_pattern == 'weekly':
+            next_date = current_date + timedelta(days=7)
+            while next_date <= end_date:
                 TaskOccurrence.objects.create(
                     task=task,
-                    date=current_date,
+                    date=next_date,
                     status='pending'
                 )
+                next_date += timedelta(days=7)
+        # Para padrão mensal, avançar um mês para cada nova ocorrência
+        elif task.repeat_pattern == 'monthly':
+            # Definir o dia do próximo mês
+            year = current_date.year
+            month = current_date.month + 1
+            day = current_date.day
             
-            # Avançar para o próximo dia
-            current_date += timedelta(days=1)
+            # Ajustar se passar para o próximo ano
+            if month > 12:
+                month = 1
+                year += 1
+            
+            # Continuar criando ocorrências até a data final
+            while True:
+                try:
+                    next_date = datetime(year, month, day).date()
+                    if next_date > end_date:
+                        break
+                    
+                    TaskOccurrence.objects.create(
+                        task=task,
+                        date=next_date,
+                        status='pending'
+                    )
+                    
+                    # Avançar para o próximo mês
+                    month += 1
+                    if month > 12:
+                        month = 1
+                        year += 1
+                except ValueError:
+                    # Caso o dia não exista no próximo mês (ex: 31 de fevereiro)
+                    # Avançar para o próximo mês
+                    month += 1
+                    if month > 12:
+                        month = 1
+                        year += 1
+                    continue
+        # Para padrões daily, weekdays, weekends e custom, gerar dia a dia
+        else:
+            next_date = current_date + timedelta(days=1)
+            while next_date <= end_date:
+                if self._should_create_occurrence(task, next_date):
+                    TaskOccurrence.objects.create(
+                        task=task,
+                        date=next_date,
+                        status='pending'
+                    )
+                
+                next_date += timedelta(days=1)
     
     def _should_create_occurrence(self, task, date):
         """Determina se deve criar uma ocorrência para esta data com base no padrão de repetição"""
+        # A data inicial já é tratada separadamente, então aqui verificamos apenas as datas subsequentes
         if date == task.date:
-            return True  # A data inicial sempre tem uma ocorrência
+            return False  # A data inicial é tratada separadamente
         
         weekday = date.weekday()  # 0 = Segunda, 6 = Domingo
         
@@ -83,9 +141,11 @@ class TaskSerializer(serializers.ModelSerializer):
         elif task.repeat_pattern == 'weekends':
             return weekday >= 5  # Sábado e Domingo
         elif task.repeat_pattern == 'weekly':
-            return date.weekday() == task.date.weekday()
+            # Esta lógica já foi tratada na função _generate_occurrences
+            return False
         elif task.repeat_pattern == 'monthly':
-            return date.day == task.date.day
+            # Esta lógica já foi tratada na função _generate_occurrences
+            return False
         elif task.repeat_pattern == 'custom' and task.repeat_days:
             days = [int(d) for d in task.repeat_days.split(',')]
             return weekday in days

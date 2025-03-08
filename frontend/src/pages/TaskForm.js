@@ -1,11 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Formik, Form, Field, ErrorMessage } from 'formik';
 import * as Yup from 'yup';
 import { format, parse } from 'date-fns';
 import { toast } from 'react-toastify';
+import { 
+  ArrowLeftIcon,
+  SaveIcon,
+  XCircleIcon, 
+  ExclamationCircleIcon,
+  ClockIcon,
+  CalendarIcon,
+  FlagIcon,
+  DocumentTextIcon,
+  BookmarkIcon
+} from '@heroicons/react/24/outline';
 
 import TaskService from '../services/TaskService';
+import CategorySelector from '../components/tasks/CategorySelector';
 import { useTasks } from '../context/TaskContext';
 
 const TaskForm = () => {
@@ -106,7 +118,9 @@ const TaskForm = () => {
   
   // Esquema de validação do formulário
   const validationSchema = Yup.object().shape({
-    // ... outras validações
+    title: Yup.string().required('Título é obrigatório'),
+    category: Yup.number().required('Categoria é obrigatória'),
+    date: Yup.date().required('Data é obrigatória'),
     start_time: Yup.string().required('Hora de início é obrigatória'),
     end_time: Yup.string()
       .required('Hora de término é obrigatória')
@@ -117,9 +131,7 @@ const TaskForm = () => {
           const { start_time } = this.parent;
           if (!start_time || !value) return true;
           
-          // Ignorar essa validação durante a edição
-          // Para permitir que o formulário seja enviado
-          return true; 
+          return true; // Simplificado para evitar problemas de validação
         }
       ),
     priority: Yup.number().required('Selecione uma prioridade'),
@@ -203,11 +215,27 @@ const TaskForm = () => {
     );
   }
   
+  // Função para renderizar rótulo com ícone
+  const renderLabel = (htmlFor, text, icon) => (
+    <label htmlFor={htmlFor} className="flex items-center gap-1 block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      {icon}
+      {text}
+    </label>
+  );
+  
   return (
-    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-      <h2 className="text-xl font-semibold mb-6 text-gray-900 dark:text-white">
-        {isEditing ? 'Editar Tarefa' : 'Nova Tarefa'}
-      </h2>
+    <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6">
+      <div className="flex items-center mb-4">
+        <button 
+          onClick={() => navigate(-1)}
+          className="mr-3 p-1.5 text-gray-400 hover:text-gray-500 rounded-full flex items-center justify-center"
+        >
+          <ArrowLeftIcon className="h-5 w-5" />
+        </button>
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
+          {isEditing ? 'Editar Tarefa' : 'Nova Tarefa'}
+        </h2>
+      </div>
       
       <Formik
         initialValues={getInitialValues()}
@@ -216,129 +244,106 @@ const TaskForm = () => {
         enableReinitialize
       >
         {({ values, isSubmitting, setFieldValue }) => (
-          <Form className="space-y-6">
+          <Form className="space-y-4 sm:space-y-6">
             {/* Título e Categoria */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Título
-                </label>
+                {renderLabel("title", "Título", <DocumentTextIcon className="w-4 h-4" />)}
                 <Field
                   id="title"
                   name="title"
                   type="text"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                   placeholder="Nome da tarefa"
                 />
-                <ErrorMessage name="title" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                <ErrorMessage name="title" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>
               
               <div>
-                <label htmlFor="category" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Categoria
-                </label>
-                <Field
-                  as="select"
-                  id="category"
-                  name="category"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                >
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </Field>
-                <ErrorMessage name="category" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                {renderLabel("category", "Categoria", <BookmarkIcon className="w-4 h-4" />)}
+                <CategorySelector 
+                  categories={categories} 
+                  selectedCategory={values.category}
+                  onChange={(value) => setFieldValue('category', value)}
+                />
+                <ErrorMessage name="category" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>
             </div>
             
             {/* Descrição */}
             <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Descrição
-              </label>
+              {renderLabel("description", "Descrição", <DocumentTextIcon className="w-4 h-4" />)}
               <Field
                 as="textarea"
                 id="description"
                 name="description"
-                rows={3}
-                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                rows={2}
+                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                 placeholder="Descrição da tarefa"
               />
             </div>
             
             {/* Data e Horário */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
               <div>
-                <label htmlFor="date" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Data
-                </label>
+                {renderLabel("date", "Data", <CalendarIcon className="w-4 h-4" />)}
                 <Field
                   id="date"
                   name="date"
                   type="date"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                 />
-                <ErrorMessage name="date" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                <ErrorMessage name="date" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>
               
               <div>
-                <label htmlFor="start_time" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Hora de Início
-                </label>
+                {renderLabel("start_time", "Início", <ClockIcon className="w-4 h-4" />)}
                 <Field
                   id="start_time"
                   name="start_time"
                   type="time"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                 />
-                <ErrorMessage name="start_time" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                <ErrorMessage name="start_time" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>
               
               <div>
-                <label htmlFor="end_time" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Hora de Término
-                </label>
+                {renderLabel("end_time", "Término", <ClockIcon className="w-4 h-4" />)}
                 <Field
                   id="end_time"
                   name="end_time"
                   type="time"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                 />
-                <ErrorMessage name="end_time" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                <ErrorMessage name="end_time" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>
             </div>
             
             {/* Prioridade e Padrão de Repetição */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
-                <label htmlFor="priority" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Prioridade
-                </label>
+                {renderLabel("priority", "Prioridade", <ExclamationCircleIcon className="w-4 h-4" />)}
                 <Field
                   as="select"
                   id="priority"
                   name="priority"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                 >
                   <option value={1}>Baixa</option>
                   <option value={2}>Média</option>
                   <option value={3}>Alta</option>
                   <option value={4}>Urgente</option>
                 </Field>
-                <ErrorMessage name="priority" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                <ErrorMessage name="priority" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>
               
               <div>
-                <label htmlFor="repeat_pattern" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Repetição
-                </label>
+                {renderLabel("repeat_pattern", "Repetição", <CalendarIcon className="w-4 h-4" />)}
                 <Field
                   as="select"
                   id="repeat_pattern"
                   name="repeat_pattern"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                 >
                   <option value="none">Não repetir</option>
                   <option value="daily">Diariamente</option>
@@ -348,58 +353,56 @@ const TaskForm = () => {
                   <option value="monthly">Mensalmente</option>
                   <option value="custom">Personalizado</option>
                 </Field>
-                <ErrorMessage name="repeat_pattern" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                <ErrorMessage name="repeat_pattern" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>
             </div>
             
             {/* Opções de Repetição Condicionais */}
             {shouldShowRepeatOptions(values) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
+                <div className="col-span-full">
+                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Opções de repetição</h3>
+                </div>
+                
                 {values.repeat_pattern === 'custom' && (
                   <div>
-                    <label htmlFor="repeat_days" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Dias de Repetição
-                    </label>
+                    {renderLabel("repeat_days", "Dias de Repetição", <CalendarIcon className="w-4 h-4" />)}
                     <Field
                       id="repeat_days"
                       name="repeat_days"
                       type="text"
-                      className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                      className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                       placeholder="Ex: 0,2,4 (0=Seg, 6=Dom)"
                     />
                     <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       0 = Segunda, 1 = Terça, 2 = Quarta, ..., 6 = Domingo
                     </div>
-                    <ErrorMessage name="repeat_days" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                    <ErrorMessage name="repeat_days" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
                   </div>
                 )}
                 
                 <div>
-                  <label htmlFor="repeat_end_date" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Repetir até
-                  </label>
+                  {renderLabel("repeat_end_date", "Repetir até", <CalendarIcon className="w-4 h-4" />)}
                   <Field
                     id="repeat_end_date"
                     name="repeat_end_date"
                     type="date"
-                    className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                   />
-                  <ErrorMessage name="repeat_end_date" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                  <ErrorMessage name="repeat_end_date" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
                 </div>
               </div>
             )}
             
             {/* Meta Associada e Valor Alvo */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
               <div>
-                <label htmlFor="goal" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Meta Associada (opcional)
-                </label>
+                {renderLabel("goal", "Meta Associada (opcional)", <FlagIcon className="w-4 h-4" />)}
                 <Field
                   as="select"
                   id="goal"
                   name="goal"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                 >
                   <option value="">Selecione uma meta (opcional)</option>
                   {goals.map((goal) => (
@@ -411,54 +414,59 @@ const TaskForm = () => {
               </div>
               
               <div>
-                <label htmlFor="target_value" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Valor Alvo (opcional)
-                </label>
+                {renderLabel("target_value", "Valor Alvo (opcional)", <BookmarkIcon className="w-4 h-4" />)}
                 <Field
                   id="target_value"
                   name="target_value"
                   type="number"
                   step="0.01"
-                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                  placeholder="Ex: 30 para 30 minutos, 5 para 5km, etc."
+                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                  placeholder="Ex: 30 para 30 minutos"
                 />
                 <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Valor planejado para esta tarefa (ex: minutos, páginas, km)
+                  Valor planejado para esta tarefa
                 </div>
-                <ErrorMessage name="target_value" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
+                <ErrorMessage name="target_value" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>
             </div>
             
             {/* Observações */}
             <div>
-              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Observações (opcional)
-              </label>
+              {renderLabel("notes", "Observações (opcional)", <DocumentTextIcon className="w-4 h-4" />)}
               <Field
                 as="textarea"
                 id="notes"
                 name="notes"
-                rows={3}
-                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                rows={2}
+                className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                 placeholder="Observações adicionais, como treino específico, livro a ser lido, etc."
               />
             </div>
             
             {/* Botões de Ação */}
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => navigate(-1)}
+            <div className="flex justify-end gap-3 pt-2">
+              <Link
+                to="/day"
                 className="py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               >
                 Cancelar
-              </button>
+              </Link>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 flex items-center gap-1"
               >
-                {isSubmitting ? 'Salvando...' : isEditing ? 'Atualizar' : 'Criar'}
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Salvando...
+                  </>
+                ) : (
+                  <>{isEditing ? 'Atualizar' : 'Criar'}</>
+                )}
               </button>
             </div>
           </Form>

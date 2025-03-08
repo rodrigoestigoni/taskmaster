@@ -13,15 +13,19 @@ import {
   UserCircleIcon,
   MoonIcon,
   SunIcon,
+  ComputerDesktopIcon,
+  BellIcon,
+  CalendarDaysIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Dia', href: '/day', icon: CalendarIcon },
+  { name: 'Dia', href: '/day', icon: ClockIcon },
   { name: 'Semana', href: '/week', icon: CalendarIcon },
-  { name: 'Mês', href: '/month', icon: CalendarIcon },
+  { name: 'Mês', href: '/month', icon: CalendarDaysIcon },
   { name: 'Metas', href: '/goals', icon: FlagIcon },
   { name: 'Relatórios', href: '/reports', icon: ChartBarIcon },
   { name: 'Configurações', href: '/settings', icon: Cog6ToothIcon },
@@ -32,6 +36,13 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+
+  // Função para fechar o sidebar após a navegação em dispositivos móveis
+  const handleNavClick = () => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  };
 
   return (
     <div className={theme === 'dark' ? 'dark' : ''}>
@@ -93,8 +104,9 @@ export default function Layout() {
                       <NavLink
                         key={item.name}
                         to={item.href}
+                        onClick={handleNavClick}
                         className={({ isActive }) =>
-                          `group flex items-center px-2 py-2 text-base font-medium rounded-md ${
+                          `group flex items-center px-2 py-3 text-base font-medium rounded-md ${
                             isActive 
                               ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300' 
                               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white'
@@ -115,6 +127,7 @@ export default function Layout() {
                 <div className="px-3 pt-4 pb-2">
                   <Link
                     to="task/new"
+                    onClick={handleNavClick}
                     className="flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     <PlusIcon className="w-5 h-5 mr-2" />
@@ -242,14 +255,14 @@ export default function Layout() {
                     <Menu.Items className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 focus:outline-none">
                       <Menu.Item>
                         {({ active }) => (
-                          <a
-                            href="#"
+                          <Link
+                            to="/settings"
                             className={`${
                               active ? 'bg-gray-100 dark:bg-gray-700' : ''
                             } block px-4 py-2 text-sm text-gray-700 dark:text-gray-300`}
                           >
                             Meu Perfil
-                          </a>
+                          </Link>
                         )}
                       </Menu.Item>
                       <Menu.Item>

@@ -99,6 +99,23 @@ class GoalViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+from rest_framework import viewsets, filters, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
+from datetime import datetime, timedelta
+from django.db.models import Q, Sum, Count, Case, When, IntegerField, F
+from django.utils import timezone
+
+from .models import Task, Category, Goal, TaskOccurrence, UserPreference
+from .serializers import (
+    TaskSerializer, CategorySerializer, GoalSerializer, 
+    TaskOccurrenceSerializer, UserPreferenceSerializer,
+    TaskReportSerializer, GoalReportSerializer, DashboardSerializer
+)
+
+
 class TaskViewSet(viewsets.ModelViewSet):
     """API para gerenciar tarefas"""
     serializer_class = TaskSerializer
@@ -110,8 +127,32 @@ class TaskViewSet(viewsets.ModelViewSet):
     ordering = ['date', 'start_time']
 
     def get_queryset(self):
-        """Retorna apenas tarefas do usuário atual"""
-        return Task.objects.filter(user=self.request.user)
+        """Retorna tarefas do usuário atual incluindo ocorrências de tarefas recorrentes para a data especificada"""
+        base_queryset = Task.objects.filter(user=self.request.user)
+        
+        # Se houver um filtro de data, incluir as ocorrências de tarefas recorrentes
+        date_param = self.request.query_params.get('date')
+        if date_param:
+            # Obter todas as ocorrências para a data específica
+            occurrences = TaskOccurrence.objects.filter(
+                task__user=self.request.user,
+                date=date_param
+            ).select_related('task')
+            
+            # IDs das tarefas com ocorrências na data
+            occurrence_task_ids = list(occurrences.values_list('task_id', flat=True))
+            
+            # Tarefas não recorrentes para a data
+            non_recurring_tasks = base_queryset.filter(date=date_param, repeat_pattern='none')
+            
+            # Tarefas recorrentes com ocorrências na data
+            recurring_tasks = base_queryset.filter(id__in=occurrence_task_ids)
+            
+            # Combinar os dois conjuntos
+            return non_recurring_tasks.union(recurring_tasks)
+        
+        # Se não houver filtro de data, retornar todas as tarefas
+        return base_queryset
     
     def perform_create(self, serializer):
         """Salva a tarefa atribuindo o usuário atual"""
@@ -119,31 +160,89 @@ class TaskViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def today(self, request):
-        """Retorna tarefas para o dia atual"""
+        """Retorna tarefas para o dia atual incluindo ocorrências de tarefas recorrentes"""
         today = timezone.localdate()
-        queryset = self.get_queryset().filter(date=today)
+        
+        # Tarefas não recorrentes para hoje
+        non_recurring_tasks = self.get_queryset().filter(date=today, repeat_pattern='none')
+        
+        # Ocorrências de tarefas recorrentes para hoje
+        occurrences = TaskOccurrence.objects.filter(
+            task__user=request.user,
+            date=today
+        ).select_related('task')
+        
+        # IDs das tarefas com ocorrências hoje
+        task_ids = list(occurrences.values_list('task_id', flat=True))
+        
+        # Tarefas recorrentes com ocorrências hoje
+        recurring_tasks = self.get_queryset().filter(id__in=task_ids)
+        
+        # Combinar os dois conjuntos
+        queryset = non_recurring_tasks.union(recurring_tasks)
+        
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def week(self, request):
-        """Retorna tarefas para a semana atual"""
+        """Retorna tarefas para a semana atual incluindo ocorrências de tarefas recorrentes"""
         today = timezone.localdate()
         start_of_week = today - timedelta(days=today.weekday())  # Segunda-feira
         end_of_week = start_of_week + timedelta(days=6)  # Domingo
         
-        queryset = self.get_queryset().filter(date__range=[start_of_week, end_of_week])
+        # Tarefas não recorrentes da semana
+        non_recurring_tasks = self.get_queryset().filter(
+            date__range=[start_of_week, end_of_week],
+            repeat_pattern='none'
+        )
+        
+        # Ocorrências de tarefas recorrentes para esta semana
+        occurrences = TaskOccurrence.objects.filter(
+            task__user=request.user,
+            date__range=[start_of_week, end_of_week]
+        ).select_related('task')
+        
+        # IDs das tarefas com ocorrências esta semana
+        task_ids = list(occurrences.values_list('task_id', flat=True))
+        
+        # Tarefas recorrentes com ocorrências esta semana
+        recurring_tasks = self.get_queryset().filter(id__in=task_ids)
+        
+        # Combinar os dois conjuntos
+        queryset = non_recurring_tasks.union(recurring_tasks)
+        
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
     @action(detail=False, methods=['get'])
     def month(self, request):
-        """Retorna tarefas para o mês atual"""
+        """Retorna tarefas para o mês atual incluindo ocorrências de tarefas recorrentes"""
         today = timezone.localdate()
-        queryset = self.get_queryset().filter(
+        
+        # Tarefas não recorrentes do mês
+        non_recurring_tasks = self.get_queryset().filter(
+            date__year=today.year,
+            date__month=today.month,
+            repeat_pattern='none'
+        )
+        
+        # Ocorrências de tarefas recorrentes para este mês
+        occurrences = TaskOccurrence.objects.filter(
+            task__user=request.user,
             date__year=today.year,
             date__month=today.month
-        )
+        ).select_related('task')
+        
+        # IDs das tarefas com ocorrências este mês
+        task_ids = list(occurrences.values_list('task_id', flat=True))
+        
+        # Tarefas recorrentes com ocorrências este mês
+        recurring_tasks = self.get_queryset().filter(id__in=task_ids)
+        
+        # Combinar os dois conjuntos
+        queryset = non_recurring_tasks.union(recurring_tasks)
+        
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     

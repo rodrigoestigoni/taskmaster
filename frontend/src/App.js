@@ -23,6 +23,7 @@ import GoalForm from './pages/GoalForm';
 import Goals from './pages/Goals';
 import Settings from './pages/Settings';
 import Reports from './pages/Reports';
+import OnboardingTutorial from './components/common/OnboardingTutorial';
 
 // Context
 import { AuthProvider } from './context/AuthContext';
@@ -67,6 +68,7 @@ function App() {
                 {/* Fallback route */}
                 <Route path="*" element={<Navigate to="" replace />} />
               </Routes>
+              <OnboardingTutorial />
             </TaskProvider>
           </AuthProvider>
         </ThemeProvider>
