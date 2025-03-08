@@ -14,11 +14,7 @@ import {
   PencilIcon,
   TrashIcon,
   PlusIcon,
-  ArrowPathIcon,
-  SunIcon,
-  MoonIcon,
-  StarIcon,
-  FireIcon
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 
@@ -27,7 +23,6 @@ import { useTasks } from '../context/TaskContext';
 import TaskStatusBadge from '../components/tasks/TaskStatusBadge';
 import TaskPriorityBadge from '../components/tasks/TaskPriorityBadge';
 import EmptyState from '../components/common/EmptyState';
-import TaskItem from '../components/tasks/TaskItem';
 
 export default function DayView() {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -130,14 +125,14 @@ export default function DayView() {
     return (
       <div 
         key={task.id} 
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-task hover:shadow-task-hover transition-shadow duration-300 overflow-hidden"
       >
         <div className="h-2" style={{ backgroundColor: categoryColor }}></div>
-        <div className="p-3 sm:p-4">
+        <div className="p-4">
           <div className="flex justify-between items-start">
             <div className="flex-1">
-              <h3 className="text-md sm:text-lg font-medium text-gray-900 dark:text-white">{task.title}</h3>
-              <div className="mt-1 flex items-center text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">{task.title}</h3>
+              <div className="mt-1 flex items-center text-sm text-gray-500 dark:text-gray-400">
                 <ClockIcon className="flex-shrink-0 mr-1.5 h-4 w-4" />
                 <span>{startTime} - {endTime}</span>
                 <span className="mx-2">•</span>
@@ -148,12 +143,12 @@ export default function DayView() {
           </div>
           
           {task.description && (
-            <p className="mt-2 text-xs sm:text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{task.description}</p>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{task.description}</p>
           )}
           
-          <div className="mt-2 sm:mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex items-center">
             <span 
-              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mr-2"
               style={{ backgroundColor: `${categoryColor}20`, color: categoryColor }}
             >
               {task.category_name}
@@ -161,7 +156,7 @@ export default function DayView() {
             <TaskStatusBadge status={task.status} />
           </div>
           
-          <div className="mt-3 sm:mt-4 flex justify-between">
+          <div className="mt-4 flex justify-between">
             <div className="flex space-x-2">
               {/* Buttons to change status */}
               <button
@@ -186,37 +181,33 @@ export default function DayView() {
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
-            
-            <Link
-              to={`/task/edit/${task.id}`}
-              className="inline-flex items-center p-1 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-              title="Editar tarefa"
-            >
-              <PencilIcon className="h-4 w-4" aria-hidden="true" />
-            </Link>
+            <div className="flex space-x-2">
+              <Link
+                to={`/task/edit/${task.id}`}
+                className="inline-flex items-center p-1 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                title="Editar tarefa"
+              >
+                <PencilIcon className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
           </div>
         </div>
       </div>
     );
   };
   
+  // Renderiza uma seção de tarefas para um período do dia
   const renderTaskSection = (title, tasks, icon) => {
     if (tasks.length === 0) return null;
     
     return (
-      <div className="mb-6 sm:mb-8">
-        <div className="flex items-center mb-3 sm:mb-4">
+      <div className="mb-8">
+        <div className="flex items-center mb-4">
           {icon}
-          <h2 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-200 ml-2">{title}</h2>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 ml-2">{title}</h2>
         </div>
         <div className="space-y-3">
-          {tasks.map(task => (
-            <TaskItem 
-              key={task.id}
-              task={task} 
-              onStatusChange={handleStatusChange} 
-            />
-          ))}
+          {tasks.map(task => renderTaskCard(task))}
         </div>
       </div>
     );
@@ -225,15 +216,15 @@ export default function DayView() {
   return (
     <div>
       {/* Date navigation */}
-      <div className="mb-4 sm:mb-6 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center space-x-3 sm:space-x-4">
+      <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center space-x-4">
           <button
             onClick={handlePreviousDay}
             className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
           </button>
-          <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">{displayDate}</h1>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{displayDate}</h1>
           <button
             onClick={handleNextDay}
             className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
@@ -241,9 +232,7 @@ export default function DayView() {
             <ChevronRightIcon className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-        
-        {/* Action buttons */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex space-x-2">
           <button
             onClick={handleToday}
             className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
@@ -255,15 +244,14 @@ export default function DayView() {
             className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             <ArrowPathIcon className="h-4 w-4 mr-1" />
-            <span className="hidden sm:inline">Atualizar</span>
+            <span>Atualizar</span>
           </button>
           <Link
-            to="/task/new"
+            to="task/new"
             className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             <PlusIcon className="h-4 w-4 mr-1" />
-            <span className="hidden sm:inline">Nova Tarefa</span>
-            <span className="sm:hidden">Nova</span>
+            <span>Nova Tarefa</span>
           </Link>
         </div>
       </div>
@@ -278,7 +266,7 @@ export default function DayView() {
           title="Sem tarefas para hoje"
           description="Não há tarefas planejadas para hoje. Que tal adicionar uma?"
           buttonText="Adicionar Tarefa"
-          buttonLink="/task/new"
+          buttonLink="task/new"
           icon={<CalendarIcon className="h-12 w-12 text-gray-400" />}
         />
       ) : (
@@ -288,7 +276,9 @@ export default function DayView() {
             'Manhã (5h - 12h)', 
             morningTasks,
             <span className="w-6 h-6 flex items-center justify-center rounded-full bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-300">
-              <SunIcon className="w-4 h-4" />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z" />
+              </svg>
             </span>
           )}
           
@@ -297,7 +287,9 @@ export default function DayView() {
             'Tarde (12h - 18h)', 
             afternoonTasks,
             <span className="w-6 h-6 flex items-center justify-center rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900 dark:text-orange-300">
-              <FireIcon className="w-4 h-4" />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z" />
+              </svg>
             </span>
           )}
           
@@ -306,7 +298,9 @@ export default function DayView() {
             'Noite (18h - 22h)', 
             eveningTasks,
             <span className="w-6 h-6 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300">
-              <StarIcon className="w-4 h-4" />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clipRule="evenodd" />
+              </svg>
             </span>
           )}
           
@@ -315,7 +309,9 @@ export default function DayView() {
             'Madrugada (22h - 5h)', 
             nightTasks,
             <span className="w-6 h-6 flex items-center justify-center rounded-full bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300">
-              <MoonIcon className="w-4 h-4" />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z" clipRule="evenodd" />
+              </svg>
             </span>
           )}
         </div>
