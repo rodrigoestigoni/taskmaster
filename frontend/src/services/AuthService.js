@@ -8,13 +8,39 @@ const AuthService = {
    * @returns {Promise} - Promessa com os tokens de acesso
    */
   login: async (email, password) => {
-    // A API Django Rest Auth espera 'email' e não 'username'
-    const response = await apiClient.post('/auth/login/', {
-      email: email,       // Alterado de username para email
-      password: password,
-    });
-    console.log('Login response:', response.data);  // Para debug
-    return response.data;
+    try {
+      // Primeira tentativa com email
+      try {
+        const response = await apiClient.post('/auth/login/', {
+          email: email,
+          password: password
+        });
+        
+        // Processar tokens e retornar
+        // Código para armazenar tokens...
+        
+        return response.data;
+      } catch (emailError) {
+        // Se falhar, tenta com username
+        // Assumindo que o username pode ser o email ou algo derivado do email
+        console.log("Tentativa com email falhou, tentando com username...");
+        
+        // Extrai o username do email (parte antes do @)
+        const username = email.includes('@') ? email.split('@')[0] : email;
+        
+        const response = await apiClient.post('/auth/login/', {
+          username: email, // Tenta o email completo como username
+          password: password
+        });
+        
+        // Código para armazenar tokens...
+        
+        return response.data;
+      }
+    } catch (error) {
+      console.error("Login error details:", error.response?.data);
+      throw error;
+    }
   },
   
   /**
@@ -23,7 +49,17 @@ const AuthService = {
    * @returns {Promise} - Promessa com a resposta do servidor
    */
   register: async (userData) => {
-    const response = await apiClient.post('/auth/register/', userData);
+    // Mapeamento dos campos para o formato esperado pelo seu backend
+    const mappedData = {
+      username: userData.username,
+      email: userData.email,
+      password1: userData.password,         // backend espera password1
+      password2: userData.password_confirm, // backend espera password2
+      first_name: userData.first_name,
+      last_name: userData.last_name
+    };
+    
+    const response = await apiClient.post('/auth/register/', mappedData);
     return response.data;
   },
   
