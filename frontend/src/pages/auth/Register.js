@@ -10,9 +10,8 @@ const Register = () => {
   const { register } = useAuth();
   const [generalError, setGeneralError] = useState('');
   
-  // Valores iniciais do formulário
+  // Valores iniciais do formulário - SEM USERNAME
   const initialValues = {
-    username: '',
     email: '',
     password: '',
     password_confirm: '',
@@ -21,12 +20,8 @@ const Register = () => {
     agree_terms: false,
   };
   
-  // Esquema de validação
+  // Esquema de validação - SEM USERNAME
   const validationSchema = Yup.object().shape({
-    username: Yup.string()
-      .min(3, 'Nome de usuário deve ter pelo menos 3 caracteres')
-      .max(30, 'Nome de usuário deve ter no máximo 30 caracteres')
-      .required('Nome de usuário é obrigatório'),
     email: Yup.string()
       .email('Email inválido')
       .required('Email é obrigatório'),
@@ -104,7 +99,7 @@ const Register = () => {
         <h2 className="mt-2 text-center text-xl font-bold text-gray-900 dark:text-white">Crie sua conta</h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
           Ou{' '}
-          <Link to="login" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
+          <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
             faça login se já possui uma conta
           </Link>
         </p>
@@ -160,22 +155,6 @@ const Register = () => {
                       />
                       <ErrorMessage name="last_name" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
                     </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Nome de usuário
-                  </label>
-                  <div className="mt-1">
-                    <Field
-                      id="username"
-                      name="username"
-                      type="text"
-                      autoComplete="username"
-                      className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-900 dark:text-white sm:text-sm"
-                    />
-                    <ErrorMessage name="username" component="div" className="mt-1 text-sm text-red-600 dark:text-red-400" />
                   </div>
                 </div>
 

@@ -176,7 +176,7 @@ class TaskViewSet(viewsets.ModelViewSet):
             
             serializer = TaskOccurrenceSerializer(occurrence)
             return Response(serializer.data)
-        else:  # Este else está causando o problema
+        else:
             # Para tarefas não recorrentes
             task.status = 'completed'
             task.actual_value = actual_value
@@ -317,4 +317,15 @@ class TaskViewSet(viewsets.ModelViewSet):
                 occurrence.save()
             
             serializer = TaskOccurrenceSerializer(occurrence)
+            return Response(serializer.data)
+        else:
+            # Para tarefas não recorrentes
+            task.status = status_value
+            if actual_value is not None:
+                task.actual_value = actual_value
+            if notes:
+                task.notes = notes
+            task.save()
+            
+            serializer = self.get_serializer(task)
             return Response(serializer.data)

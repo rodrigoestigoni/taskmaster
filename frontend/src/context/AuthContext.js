@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AuthService from '../services/AuthService';
+import axios from 'axios';
 
 const AuthContext = createContext();
 
@@ -14,15 +15,42 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       try {
         const token = localStorage.getItem('accessToken');
+        const email = localStorage.getItem('userEmail');
         
-        if (token) {
-          const userData = await AuthService.getCurrentUser();
-          setUser(userData);
+        if (token && email) {
+          try {
+            // Tentar verificar o token sem fazer uma chamada real
+            const isTokenValid = await AuthService.verifyToken();
+            
+            if (isTokenValid) {
+              setUser({ email });
+            } else {
+              // Tentar renovar o token
+              const refreshToken = localStorage.getItem('refreshToken');
+              if (refreshToken) {
+                try {
+                  // Chamar endpoint de refresh
+                  const response = await axios.post(`/api/auth/token/refresh/`, {
+                    refresh: refreshToken,
+                  });
+                  
+                  // Atualizar token no localStorage
+                  localStorage.setItem('accessToken', response.data.access);
+                  setUser({ email });
+                } catch (refreshError) {
+                  // Falha na renovação, limpar tokens
+                  localStorage.removeItem('accessToken');
+                  localStorage.removeItem('refreshToken');
+                  localStorage.removeItem('userEmail');
+                }
+              }
+            }
+          } catch (error) {
+            console.error("Token verification failed:", error);
+          }
         }
       } catch (err) {
         console.error('Auth check failed:', err);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
       } finally {
         setLoading(false);
       }
@@ -36,12 +64,12 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await AuthService.login(email, password);
       
-      localStorage.setItem('accessToken', response.data.access || response.data.token);
-      localStorage.setItem('refreshToken', response.data.refresh || response.data.refresh_token);
+      localStorage.setItem('accessToken', response.access);
+      localStorage.setItem('refreshToken', response.refresh);
+      localStorage.setItem('userEmail', email);
       
-      const userData = await AuthService.getCurrentUser();
-      setUser(userData);
-      return userData;
+      setUser({ email });
+      return { email };
     } catch (err) {
       console.error('Login failed:', err);
       setError(err.response?.data?.detail || 'Falha na autenticação. Verifique suas credenciais.');
@@ -64,6 +92,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('userEmail');
     setUser(null);
   };
   
@@ -89,19 +118,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
   
-  const updateProfile = async (userData) => {
-    setError(null);
-    try {
-      const updatedUser = await AuthService.updateProfile(userData);
-      setUser(updatedUser);
-      return updatedUser;
-    } catch (err) {
-      console.error('Profile update failed:', err);
-      setError(err.response?.data?.detail || 'Falha ao atualizar perfil.');
-      throw err;
-    }
-  };
-  
   const value = {
     user,
     loading,
@@ -111,7 +127,6 @@ export const AuthProvider = ({ children }) => {
     logout,
     forgotPassword,
     resetPassword,
-    updateProfile,
     isAuthenticated: !!user,
   };
   

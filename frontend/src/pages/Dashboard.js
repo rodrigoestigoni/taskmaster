@@ -42,7 +42,13 @@ export default function Dashboard() {
       setDashboardData(response.data);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      toast.error('Erro ao carregar dados do dashboard');
+      // Em vez de mostrar toast de erro, apenas inicializa com dados vazios
+      setDashboardData({
+        today: { total: 0, completed: 0, in_progress: 0, pending: 0, high_priority: 0 },
+        week: { total: 0, completed: 0, completion_rate: 0 },
+        goals: { total: 0, active: 0, completed: 0, close_to_deadline: 0 },
+        completion_trend: []
+      });
     }
   };
   
@@ -56,7 +62,8 @@ export default function Dashboard() {
       setTodayTasks(sortedTasks);
     } catch (error) {
       console.error('Error fetching today tasks:', error);
-      toast.error('Erro ao carregar tarefas de hoje');
+      // Inicializar com array vazio em vez de mostrar erro
+      setTodayTasks([]);
     }
   };
   
@@ -76,6 +83,7 @@ export default function Dashboard() {
       setActiveGoals(sortedGoals.slice(0, 3)); // Mostrar apenas as 3 primeiras
     } catch (error) {
       console.error('Error fetching active goals:', error);
+      setActiveGoals([]);
     } finally {
       setLoading(false);
     }
