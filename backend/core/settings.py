@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'dj_rest_auth',
     'dj_rest_auth.registration',
     'app.tasks',
+    'app.accounts',
 ]
 
 SITE_ID = 1
@@ -72,22 +73,12 @@ REST_FRAMEWORK = {
     ],
 }
 
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'AUTH_HEADER_TYPES': ('Bearer',),
-}
-
 REST_AUTH = {
     'USE_JWT': True,
     'USER_DETAILS_SERIALIZER': 'dj_rest_auth.serializers.UserDetailsSerializer',
 }
 
 REST_USE_JWT = True
-
-REST_AUTH_SERIALIZERS = {
-    'LOGIN_SERIALIZER': 'dj_rest_auth.serializers.LoginSerializer',
-}
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
@@ -187,3 +178,18 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'mediafiles')
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_AUTH_SERIALIZERS = {
+    'LOGIN_SERIALIZER': 'dj_rest_auth.serializers.LoginSerializer',
+    'LOGIN_SERIALIZER': 'app.accounts.serializers.CustomLoginSerializer',
+}
+
+LOGIN_SERIALIZER = 'dj_rest_auth.serializers.LoginSerializer'
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id', 
+    'USER_ID_CLAIM': 'user_id',
+}

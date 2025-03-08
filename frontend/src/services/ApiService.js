@@ -48,11 +48,13 @@ apiClient.interceptors.response.use(
         const refreshToken = localStorage.getItem('refreshToken');
         
         if (!refreshToken) {
-          // Se não tiver refresh token, não redirecione automaticamente
+          // Se não tiver refresh token, logout
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
           return Promise.reject(error);
         }
         
-        // Renovar token
+        // Renovar token usando o endpoint do dj-rest-auth
         const response = await axios.post(`${API_URL}/auth/token/refresh/`, {
           refresh: refreshToken,
         });
@@ -64,7 +66,7 @@ apiClient.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
-        // Se falhar a renovação, apenas rejeite o erro sem redirecionamento
+        // Se falhar a renovação, remover tokens
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         return Promise.reject(refreshError);

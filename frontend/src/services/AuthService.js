@@ -8,40 +8,23 @@ const AuthService = {
    * @returns {Promise} - Promessa com os tokens de acesso
    */
   login: async (email, password) => {
-    try {
-      // Primeira tentativa com email
-      try {
-        const response = await apiClient.post('/auth/login/', {
-          email: email,
-          password: password
-        });
-        
-        // Processar tokens e retornar
-        // Código para armazenar tokens...
-        
-        return response.data;
-      } catch (emailError) {
-        // Se falhar, tenta com username
-        // Assumindo que o username pode ser o email ou algo derivado do email
-        console.log("Tentativa com email falhou, tentando com username...");
-        
-        // Extrai o username do email (parte antes do @)
-        const username = email.includes('@') ? email.split('@')[0] : email;
-        
-        const response = await apiClient.post('/auth/login/', {
-          username: email, // Tenta o email completo como username
-          password: password
-        });
-        
-        // Código para armazenar tokens...
-        
-        return response.data;
-      }
-    } catch (error) {
-      console.error("Login error details:", error.response?.data);
-      throw error;
+  try {
+    const response = await apiClient.post('/auth/login/', {
+      email: email,
+      password: password
+    });
+    
+    // Verificar se temos o token no formato esperado
+    if (!response.data.access && !response.data.token) {
+      throw new Error('Formato de token inválido na resposta');
     }
-  },
+    
+    return response.data;
+  } catch (error) {
+    console.error("Login error details:", error.response?.data);
+    throw error;
+  }
+},
   
   /**
    * Registrar novo usuário

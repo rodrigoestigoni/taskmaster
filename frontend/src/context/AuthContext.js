@@ -36,11 +36,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await AuthService.login(email, password);
       
-      // Verifique se os tokens são recebidos corretamente
-      console.log('Login response:', response);  // Temporário para debug
-      
-      localStorage.setItem('accessToken', response.access || response.token);
-      localStorage.setItem('refreshToken', response.refresh || response.refresh_token);
+      localStorage.setItem('accessToken', response.data.access || response.data.token);
+      localStorage.setItem('refreshToken', response.data.refresh || response.data.refresh_token);
       
       const userData = await AuthService.getCurrentUser();
       setUser(userData);

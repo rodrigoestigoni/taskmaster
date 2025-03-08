@@ -30,20 +30,30 @@ const Login = () => {
       .required('Senha é obrigatória'),
   });
   
-  // Submeter o formulário
   const handleSubmit = async (values, { setSubmitting }) => {
     setGeneralError('');
     
     try {
-      await login(values.email, values.password);
+      const userData = await login(values.email, values.password);
       toast.success('Login realizado com sucesso!');
       navigate(from, { replace: true });
     } catch (error) {
       console.error('Login error:', error);
-      setGeneralError(
-        error.response?.data?.detail || 
-        'Erro ao fazer login. Verifique suas credenciais.'
-      );
+      
+      if (error.response) {
+        // Se temos uma resposta específica do servidor
+        if (error.response.status === 400) {
+          setGeneralError('Email ou senha incorretos. Verifique suas credenciais.');
+        } else {
+          setGeneralError(
+            error.response.data.detail || 
+            error.response.data.non_field_errors?.[0] ||
+            'Erro ao fazer login. Tente novamente mais tarde.'
+          );
+        }
+      } else {
+        setGeneralError('Erro de conexão. Verifique sua internet e tente novamente.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -56,7 +66,7 @@ const Login = () => {
         <h2 className="mt-2 text-center text-xl font-bold text-gray-900 dark:text-white">Faça login na sua conta</h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
           Ou{' '}
-          <Link to="register" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
+          <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
             crie uma nova conta
           </Link>
         </p>
