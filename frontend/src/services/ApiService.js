@@ -36,18 +36,19 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // Se erro 401 (não autorizado) e ainda não tentamos renovar o token
-    if (error.response.status === 401 && !originalRequest._retry) {
+    // Não tente renovar o token para rotas de autenticação
+    const isAuthRoute = originalRequest.url.includes('/auth/login') || 
+                       originalRequest.url.includes('/auth/register');
+    
+    // Se erro 401 (não autorizado) e ainda não tentamos renovar o token e não é rota de autenticação
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRoute) {
       originalRequest._retry = true;
       
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         
         if (!refreshToken) {
-          // Se não tiver refresh token, logout
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
+          // Se não tiver refresh token, não redirecione automaticamente
           return Promise.reject(error);
         }
         
@@ -63,10 +64,9 @@ apiClient.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
-        // Se falhar a renovação, logout
+        // Se falhar a renovação, apenas rejeite o erro sem redirecionamento
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }

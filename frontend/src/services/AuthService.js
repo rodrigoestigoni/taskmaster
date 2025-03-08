@@ -8,10 +8,12 @@ const AuthService = {
    * @returns {Promise} - Promessa com os tokens de acesso
    */
   login: async (email, password) => {
+    // A API Django Rest Auth espera 'email' e não 'username'
     const response = await apiClient.post('/auth/login/', {
-      username: email,
-      password,
+      email: email,       // Alterado de username para email
+      password: password,
     });
+    console.log('Login response:', response.data);  // Para debug
     return response.data;
   },
   

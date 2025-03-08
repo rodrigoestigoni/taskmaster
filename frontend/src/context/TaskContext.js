@@ -13,10 +13,16 @@ export const TaskProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
-  // Funções de carregamento inicial
+  // Funções de carregamento inicial apenas se estiver autenticado
   useEffect(() => {
-    fetchCategories();
-    fetchTodayTasks();
+    // Importar o contexto de autenticação
+    const token = localStorage.getItem('accessToken');
+    
+    // Só carregar os dados se o usuário estiver autenticado
+    if (token) {
+      fetchCategories();
+      fetchTodayTasks();
+    }
   }, []);
   
   // Buscar categorias

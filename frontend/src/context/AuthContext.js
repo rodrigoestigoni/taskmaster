@@ -35,8 +35,12 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const response = await AuthService.login(email, password);
-      localStorage.setItem('accessToken', response.access);
-      localStorage.setItem('refreshToken', response.refresh);
+      
+      // Verifique se os tokens são recebidos corretamente
+      console.log('Login response:', response);  // Temporário para debug
+      
+      localStorage.setItem('accessToken', response.access || response.token);
+      localStorage.setItem('refreshToken', response.refresh || response.refresh_token);
       
       const userData = await AuthService.getCurrentUser();
       setUser(userData);
@@ -46,7 +50,7 @@ export const AuthProvider = ({ children }) => {
       setError(err.response?.data?.detail || 'Falha na autenticação. Verifique suas credenciais.');
       throw err;
     }
-  };
+  }
   
   const register = async (userData) => {
     setError(null);
