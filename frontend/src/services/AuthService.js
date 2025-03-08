@@ -8,23 +8,30 @@ const AuthService = {
    * @returns {Promise} - Promessa com os tokens de acesso
    */
   login: async (email, password) => {
-  try {
-    const response = await apiClient.post('/auth/login/', {
-      email: email,
-      password: password
-    });
-    
-    // Verificar se temos o token no formato esperado
-    if (!response.data.access && !response.data.token) {
-      throw new Error('Formato de token inválido na resposta');
+    try {
+      console.error('Tentativa de login:', { email });
+      
+      const response = await apiClient.post('/auth/login/', {
+        email: email,
+        password: password
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      console.error('Resposta de login:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Erro de login completo:', {
+        response: error.response?.data,
+        status: error.response?.status,
+        headers: error.response?.headers
+      });
+      throw error;
     }
-    
-    return response.data;
-  } catch (error) {
-    console.error("Login error details:", error.response?.data);
-    throw error;
-  }
-},
+  },
   
   /**
    * Registrar novo usuário

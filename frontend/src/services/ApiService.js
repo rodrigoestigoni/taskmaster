@@ -9,23 +9,46 @@ const API_URL = `/api`;
 const apiClient = axios.create({
   baseURL: API_URL,
   timeout: 10000, // 10 segundos
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'X-CSRFToken': getCookie('csrftoken')
   },
 });
 
-// Interceptador para adicionar token de autenticação
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+
+// Adicione interceptores para atualizar o CSRF token
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Atualizar CSRF token a cada requisição
+    const csrfToken = getCookie('csrftoken');
+    if (csrfToken) {
+      config.headers['X-CSRFToken'] = csrfToken;
+    }
+    
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Interceptador para renovar token quando expirado
