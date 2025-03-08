@@ -3,7 +3,7 @@ import axios from 'axios';
 const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
 const domain = window.location.hostname;
 
-const API_URL = `/taskmaster/api`;
+const API_URL = `/api`;
 
 // Criar instância do axios com configuração base
 const apiClient = axios.create({

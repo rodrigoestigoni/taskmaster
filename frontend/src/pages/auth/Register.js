@@ -104,7 +104,7 @@ const Register = () => {
         <h2 className="mt-2 text-center text-xl font-bold text-gray-900 dark:text-white">Crie sua conta</h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
           Ou{' '}
-          <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
+          <Link to="login" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
             faça login se já possui uma conta
           </Link>
         </p>

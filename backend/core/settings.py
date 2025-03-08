@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-_q=i!9evs*mk)*!#t!sjd1d$g_)#qxes(me%5trwa^lmd!ve4o
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ultimoingresso.com.br', 'www.ultimoingresso.com.br']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ultimoingresso.com.br', 'www.ultimoingresso.com.br', 'taskmaster.ultimoingresso.com.br']
 
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
@@ -55,9 +55,9 @@ INSTALLED_APPS = [
 
 SITE_ID = 1
 
-ACCOUNT_EMAIL_VERIFICATION = 'none'
-ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
+ACCOUNT_AUTHENTICATION_METHOD = 'email'
 ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_UNIQUE_EMAIL = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -81,6 +81,7 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
+    "https://taskmaster.ultimoingresso.com.br",
     "https://ultimoingresso.com.br",
     "http://ultimoingresso.com.br",
     "http://localhost:8081",

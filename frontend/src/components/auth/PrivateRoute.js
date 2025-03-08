@@ -18,7 +18,7 @@ const PrivateRoute = () => {
   // Redirecionar para login se não estiver autenticado
   // Preserva o caminho atual para redirecionamento após login
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="login" state={{ from: location }} replace />;
   }
   
   // Renderizar o conteúdo da rota protegida

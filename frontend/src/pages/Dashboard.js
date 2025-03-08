@@ -309,7 +309,7 @@ export default function Dashboard() {
         ))}
         
         <div className="text-center pt-3">
-          <Link to="/day" className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium">
+          <Link to="day" className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium">
             Ver todas as tarefas
           </Link>
         </div>
@@ -324,7 +324,7 @@ export default function Dashboard() {
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           <FlagIcon className="h-12 w-12 mx-auto" />
           <p className="mt-2 text-sm">Sem metas ativas no momento.</p>
-          <Link to="/goal/new" className="mt-2 inline-flex items-center text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium">
+          <Link to="goal/new" className="mt-2 inline-flex items-center text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium">
             <PlusIcon className="h-4 w-4 mr-1" />
             Criar Meta
           </Link>
@@ -368,7 +368,7 @@ export default function Dashboard() {
         ))}
         
         <div className="text-center pt-2">
-          <Link to="/goals" className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium">
+          <Link to="goals" className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 text-sm font-medium">
             Ver todas as metas
           </Link>
         </div>
@@ -469,22 +469,22 @@ export default function Dashboard() {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
         <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Ações Rápidas</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          <Link to="/task/new" className="flex flex-col items-center justify-center p-4 bg-primary-50 dark:bg-primary-900 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-800 transition-colors">
+          <Link to="task/new" className="flex flex-col items-center justify-center p-4 bg-primary-50 dark:bg-primary-900 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-800 transition-colors">
             <PlusIcon className="h-6 w-6 text-primary-700 dark:text-primary-300 mb-2" />
             <span className="text-sm font-medium text-primary-700 dark:text-primary-300">Nova Tarefa</span>
           </Link>
           
-          <Link to="/day" className="flex flex-col items-center justify-center p-4 bg-blue-50 dark:bg-blue-900 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors">
+          <Link to="day" className="flex flex-col items-center justify-center p-4 bg-blue-50 dark:bg-blue-900 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800 transition-colors">
             <CalendarIcon className="h-6 w-6 text-blue-700 dark:text-blue-300 mb-2" />
             <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Ver Hoje</span>
           </Link>
           
-          <Link to="/goal/new" className="flex flex-col items-center justify-center p-4 bg-amber-50 dark:bg-amber-900 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-800 transition-colors">
+          <Link to="goal/new" className="flex flex-col items-center justify-center p-4 bg-amber-50 dark:bg-amber-900 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-800 transition-colors">
             <FlagIcon className="h-6 w-6 text-amber-700 dark:text-amber-300 mb-2" />
             <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Nova Meta</span>
           </Link>
           
-          <Link to="/reports" className="flex flex-col items-center justify-center p-4 bg-green-50 dark:bg-green-900 rounded-lg hover:bg-green-100 dark:hover:bg-green-800 transition-colors">
+          <Link to="reports" className="flex flex-col items-center justify-center p-4 bg-green-50 dark:bg-green-900 rounded-lg hover:bg-green-100 dark:hover:bg-green-800 transition-colors">
             <ChartBarIcon className="h-6 w-6 text-green-700 dark:text-green-300 mb-2" />
             <span className="text-sm font-medium text-green-700 dark:text-green-300">Relatórios</span>
           </Link>

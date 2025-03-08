@@ -34,7 +34,7 @@ import PrivateRoute from './components/auth/PrivateRoute';
 
 function App() {
     return (
-      <Router basename="/taskmaster">
+      <Router basename="">
         <ThemeProvider>
           <AuthProvider>
             <TaskProvider>
@@ -42,30 +42,30 @@ function App() {
               <Routes>
                 {/* Auth routes */}
                 <Route element={<AuthLayout />}>
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
-                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="login" element={<Login />} />
+                  <Route path="register" element={<Register />} />
+                  <Route path="forgot-password" element={<ForgotPassword />} />
                 </Route>
                 
                 {/* Protected routes */}
                 <Route element={<PrivateRoute />}>
                   <Route element={<Layout />}>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/day" element={<DayView />} />
-                    <Route path="/week" element={<WeekView />} />
-                    <Route path="/month" element={<MonthView />} />
-                    <Route path="/task/new" element={<TaskForm />} />
-                    <Route path="/task/edit/:id" element={<TaskForm />} />
-                    <Route path="/goals" element={<Goals />} />
-                    <Route path="/goal/new" element={<GoalForm />} />
-                    <Route path="/goal/edit/:id" element={<GoalForm />} />
-                    <Route path="/reports" element={<Reports />} />
-                    <Route path="/settings" element={<Settings />} />
+                    <Route path="" element={<Dashboard />} />
+                    <Route path="day" element={<DayView />} />
+                    <Route path="week" element={<WeekView />} />
+                    <Route path="month" element={<MonthView />} />
+                    <Route path="task/new" element={<TaskForm />} />
+                    <Route path="task/edit/:id" element={<TaskForm />} />
+                    <Route path="goals" element={<Goals />} />
+                    <Route path="goal/new" element={<GoalForm />} />
+                    <Route path="goal/edit/:id" element={<GoalForm />} />
+                    <Route path="reports" element={<Reports />} />
+                    <Route path="settings" element={<Settings />} />
                   </Route>
                 </Route>
                 
                 {/* Fallback route */}
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<Navigate to="" replace />} />
               </Routes>
             </TaskProvider>
           </AuthProvider>

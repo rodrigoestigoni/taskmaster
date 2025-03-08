@@ -84,7 +84,7 @@ const ResetPassword = () => {
               </div>
             </div>
             <div className="mt-6 text-center">
-              <Link to="/forgot-password" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
+              <Link to="forgot-password" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
                 Solicitar novo link
               </Link>
             </div>
@@ -123,7 +123,7 @@ const ResetPassword = () => {
                 </div>
               </div>
               <div className="text-center">
-                <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
+                <Link to="login" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
                   Ir para a página de login
                 </Link>
               </div>

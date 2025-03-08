@@ -206,7 +206,7 @@ export default function WeekView() {
             <span>Atualizar</span>
           </button>
           <Link
-            to="/task/new"
+            to="task/new"
             className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             <PlusIcon className="h-4 w-4 mr-1" />
@@ -225,7 +225,7 @@ export default function WeekView() {
           title="Sem tarefas para esta semana"
           description="Não há tarefas planejadas para esta semana. Que tal adicionar alguma?"
           buttonText="Adicionar Tarefa"
-          buttonLink="/task/new"
+          buttonLink="task/new"
           icon={<CalendarIcon className="h-12 w-12 text-gray-400" />}
         />
       ) : (

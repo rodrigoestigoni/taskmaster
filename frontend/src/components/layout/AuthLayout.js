@@ -20,7 +20,7 @@ const AuthLayout = () => {
   
   // Redirecionar para o dashboard se já estiver autenticado
   if (isAuthenticated) {
-    return <Navigate to="/" />;
+    return <Navigate to="" />;
   }
   
   // Renderizar o conteúdo da página de autenticação

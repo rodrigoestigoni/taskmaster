@@ -56,7 +56,7 @@ const Login = () => {
         <h2 className="mt-2 text-center text-xl font-bold text-gray-900 dark:text-white">Faça login na sua conta</h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
           Ou{' '}
-          <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
+          <Link to="register" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
             crie uma nova conta
           </Link>
         </p>
@@ -129,7 +129,7 @@ const Login = () => {
                   </div>
 
                   <div className="text-sm">
-                    <Link to="/forgot-password" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
+                    <Link to="forgot-password" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
                       Esqueceu sua senha?
                     </Link>
                   </div>

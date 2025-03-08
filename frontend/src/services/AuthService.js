@@ -8,8 +8,8 @@ const AuthService = {
    * @returns {Promise} - Promessa com os tokens de acesso
    */
   login: async (email, password) => {
-    const response = await apiClient.post('/auth/token/', {
-      email,
+    const response = await apiClient.post('/auth/login/', {
+      username: email,
       password,
     });
     return response.data;
