@@ -138,7 +138,17 @@ export const TaskProvider = ({ children }) => {
       
       const response = await TaskService.updateTaskStatus(taskId, data);
       
-      // Atualizar lista local se for hoje
+      // Make sure we're updating the local state after the API call
+      // This ensures the UI reflects the changes immediately
+      setTasks(prevTasks => 
+        prevTasks.map(task => 
+          String(task.id) === String(taskId)
+            ? { ...task, status: status } 
+            : task
+        )
+      );
+      
+      // Also update todayTasks if the updated task is for today
       const today = format(new Date(), 'yyyy-MM-dd');
       if (formattedDate === today) {
         fetchTodayTasks();
