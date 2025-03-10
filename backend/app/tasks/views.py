@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from django.db.models import Q, Sum, Count, Case, When, IntegerField, F
 from django.utils import timezone
 
+from .services import EnergyMatchService
 from .models import Task, Category, Goal, TaskOccurrence, UserPreference
 from .serializers import (
     TaskSerializer, CategorySerializer, GoalSerializer, 
@@ -884,3 +885,19 @@ class TaskViewSet(viewsets.ModelViewSet):
             
             serializer = self.get_serializer(task)
             return Response(serializer.data)
+            
+    @action(detail=False, methods=['get'])
+    def energy_recommendations(self, request):
+        """Retorna tarefas recomendadas com base no nível de energia atual"""
+        try:
+            current_energy = EnergyMatchService.get_current_energy_level(request.user)
+            recommended_tasks = EnergyMatchService.get_recommended_tasks(request.user)
+            
+            serializer = self.get_serializer(recommended_tasks, many=True)
+            
+            return Response({
+                'current_energy_level': current_energy,
+                'recommended_tasks': serializer.data
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

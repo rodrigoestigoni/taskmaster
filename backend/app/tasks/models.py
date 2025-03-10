@@ -103,6 +103,12 @@ class Task(models.Model):
         ('monthly', _('Mensalmente')),
         ('custom', _('Personalizado')),
     ]
+
+    ENERGY_LEVEL_CHOICES = [
+        ('high', _('Alta Energia')),
+        ('medium', _('Energia Média')),
+        ('low', _('Baixa Energia')),
+    ]
     
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="tasks", verbose_name=_("Usuário"))
     title = models.CharField(_("Título"), max_length=200)
@@ -127,6 +133,7 @@ class Task(models.Model):
     notes = models.TextField(_("Observações"), blank=True, null=True)
     created_at = models.DateTimeField(_("Criado em"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Atualizado em"), auto_now=True)
+    energy_level = models.CharField(_("Nível de Energia"), max_length=10, choices=ENERGY_LEVEL_CHOICES, default='medium')
     
     class Meta:
         verbose_name = _("Tarefa")
@@ -157,7 +164,37 @@ class Task(models.Model):
             self.goal.current_value += self.actual_value
             self.goal.update_progress()
 
-
+class EnergyProfile(models.Model):
+    """Perfil de energia do usuário ao longo do dia"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="energy_profile")
+    
+    # Períodos da manhã
+    early_morning_energy = models.IntegerField(_("Energia no início da manhã (5h-8h)"), default=5)
+    mid_morning_energy = models.IntegerField(_("Energia no meio da manhã (8h-11h)"), default=7)
+    late_morning_energy = models.IntegerField(_("Energia no final da manhã (11h-14h)"), default=6)
+    
+    # Períodos da tarde
+    early_afternoon_energy = models.IntegerField(_("Energia no início da tarde (14h-17h)"), default=5)
+    late_afternoon_energy = models.IntegerField(_("Energia no final da tarde (17h-20h)"), default=4)
+    
+    # Períodos da noite
+    evening_energy = models.IntegerField(_("Energia à noite (20h-23h)"), default=3)
+    night_energy = models.IntegerField(_("Energia durante a noite (23h-5h)"), default=2)
+    
+    # Modificadores por dia da semana
+    monday_modifier = models.IntegerField(_("Modificador de segunda-feira"), default=0)
+    tuesday_modifier = models.IntegerField(_("Modificador de terça-feira"), default=0)
+    wednesday_modifier = models.IntegerField(_("Modificador de quarta-feira"), default=0)
+    thursday_modifier = models.IntegerField(_("Modificador de quinta-feira"), default=0)
+    friday_modifier = models.IntegerField(_("Modificador de sexta-feira"), default=0)
+    saturday_modifier = models.IntegerField(_("Modificador de sábado"), default=1)
+    sunday_modifier = models.IntegerField(_("Modificador de domingo"), default=1)
+    
+    # Métodos para calcular energia para um determinado horário e dia
+    def get_energy_level_for_time(self, time_obj, day_of_week=None):
+        """Retorna o nível de energia para um horário específico"""
+        # Implementação aqui
+        
 class TaskOccurrence(models.Model):
     """Ocorrências individuais de tarefas recorrentes"""
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="occurrences", verbose_name=_("Tarefa"))

@@ -19,6 +19,7 @@ import { toast } from 'react-toastify';
 import TaskService from '../services/TaskService';
 import TaskStatusBadge from '../components/tasks/TaskStatusBadge';
 import TaskPriorityBadge from '../components/tasks/TaskPriorityBadge';
+import EnergyRecommendations from '../components/energy/EnergyRecommendations';
 import EmptyState from '../components/common/EmptyState';
 
 // Registrar componentes do Chart.js
@@ -470,6 +471,10 @@ export default function Dashboard() {
         <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow p-4">
           <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Metas em Andamento</h2>
           {renderActiveGoals()}
+        </div>
+
+        <div className="lg:col-span-1">
+          <EnergyRecommendations />
         </div>
       </div>
       

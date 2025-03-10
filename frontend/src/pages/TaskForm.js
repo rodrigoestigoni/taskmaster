@@ -13,6 +13,7 @@ import {
   CalendarIcon,
   FlagIcon,
   DocumentTextIcon,
+  BoltIcon,
   BookmarkIcon
 } from '@heroicons/react/24/outline';
 
@@ -320,7 +321,7 @@ const TaskForm = () => {
             </div>
             
             {/* Prioridade e Padrão de Repetição */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
               <div>
                 {renderLabel("priority", "Prioridade", <ExclamationCircleIcon className="w-4 h-4" />)}
                 <Field
@@ -335,6 +336,23 @@ const TaskForm = () => {
                   <option value={4}>Urgente</option>
                 </Field>
                 <ErrorMessage name="priority" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
+              </div>
+
+              <div>
+                {renderLabel("energy_level", "Nível de Energia Necessário", <BoltIcon className="w-4 h-4" />)}
+                <Field
+                  as="select"
+                  id="energy_level"
+                  name="energy_level"
+                  className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                >
+                  <option value="high">Alta Energia</option>
+                  <option value="medium">Energia Média</option>
+                  <option value="low">Baixa Energia</option>
+                </Field>
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Selecione o nível de energia necessário para realizar esta tarefa
+                </div>
               </div>
               
               <div>

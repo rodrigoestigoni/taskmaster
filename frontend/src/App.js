@@ -24,6 +24,7 @@ import Goals from './pages/Goals';
 import Settings from './pages/Settings';
 import Reports from './pages/Reports';
 import OnboardingTutorial from './components/common/OnboardingTutorial';
+import EnergyProfilePage from './pages/EnergyProfilePage';
 
 // Context
 import { AuthProvider } from './context/AuthContext';
@@ -51,17 +52,18 @@ function App() {
                 {/* Protected routes */}
                 <Route element={<PrivateRoute />}>
                   <Route element={<Layout />}>
-                    <Route path="" element={<Dashboard />} />
-                    <Route path="day" element={<DayView />} />
-                    <Route path="week" element={<WeekView />} />
-                    <Route path="month" element={<MonthView />} />
-                    <Route path="task/new" element={<TaskForm />} />
-                    <Route path="task/edit/:id" element={<TaskForm />} />
-                    <Route path="goals" element={<Goals />} />
-                    <Route path="goal/new" element={<GoalForm />} />
-                    <Route path="goal/edit/:id" element={<GoalForm />} />
-                    <Route path="reports" element={<Reports />} />
-                    <Route path="settings" element={<Settings />} />
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/day" element={<DayView />} />
+                    <Route path="/week" element={<WeekView />} />
+                    <Route path="/month" element={<MonthView />} />
+                    <Route path="/task/new" element={<TaskForm />} />
+                    <Route path="/task/edit/:id" element={<TaskForm />} />
+                    <Route path="/energy" element={<EnergyProfilePage />} />
+                    <Route path="/goals" element={<Goals />} />
+                    <Route path="/goal/new" element={<GoalForm />} />
+                    <Route path="/goal/edit/:id" element={<GoalForm />} />
+                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/settings" element={<Settings />} />
                   </Route>
                 </Route>
                 

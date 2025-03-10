@@ -9,6 +9,7 @@ import {
   CalendarIcon, 
   CheckIcon,
   FaceFrownIcon,
+  HandThumbDownIcon,
   XMarkIcon,
   PauseIcon,
   PlayIcon,
@@ -272,7 +273,7 @@ export default function DayView() {
           <TaskStatusBadge status={task.status} />
         </div>
           
-          <div className="flex space-x-2">
+          <div className="flex space-x-2 gap-6 mt-3">
             {/* Botões para alterar status - mostrar apenas para tarefas de hoje que não estão concluídas */}
             {isToday && !isCompleted ? (
               <>
@@ -283,19 +284,21 @@ export default function DayView() {
                 >
                   <CheckIcon className="h-4 w-4" aria-hidden="true" />
                 </button>
-                <button
+                {task.status != 'in_progress' && (
+                  <button
                   onClick={() => handleStatusChange(task.id, 'in_progress')}
                   className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   title="Marcar em andamento"
                 >
                   <PlayIcon className="h-4 w-4" aria-hidden="true" />
                 </button>
+                )}                
                 <button
                   onClick={() => handleStatusChange(task.id, 'failed')}
                   className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500"
                   title="Marcar como não realizada"
                 >
-                  <FaceFrownIcon className="h-4 w-4" aria-hidden="true" />
+                  <HandThumbDownIcon className="h-4 w-4" aria-hidden="true" />
                 </button>
               </>
             ) : isToday && isCompleted ? (
@@ -310,9 +313,7 @@ export default function DayView() {
                 {format(parseISO(task.date), 'dd/MM/yyyy')}
               </span>
             )}
-          </div>
-          {/* Botão de edição sempre disponível */}
-          <Link
+            <Link
               to={`/task/edit/${task.id}`}
               className="inline-flex items-center p-1 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               title="Editar tarefa"
@@ -320,15 +321,14 @@ export default function DayView() {
               <PencilIcon className="h-4 w-4" aria-hidden="true" />
             </Link>
             
-            {/* Botão de exclusão sempre disponível */}
             <button
               onClick={() => handleDeleteTask(task.id)}
-              className="inline-flex items-center p-1 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              className="inline-flex items-center p-1 border border-red-300 dark:border-gray-600 rounded-full shadow-sm text-red-700 dark:text-red-300 bg-white dark:bg-red-700 hover:bg-red-50 dark:hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               title="Excluir tarefa"
             >
               <TrashIcon className="h-4 w-4" aria-hidden="true" />
             </button>
-          
+          </div>
         </div>
         <DeleteTaskModal
           isOpen={deleteModalOpen}
