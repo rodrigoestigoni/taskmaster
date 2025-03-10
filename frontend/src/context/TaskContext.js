@@ -118,11 +118,13 @@ export const TaskProvider = ({ children }) => {
     }
   };
   
-  // Atualizar status da tarefa
+  // Função de atualização de status
   const updateTaskStatus = async (taskId, status, date, actualValue = null, notes = null) => {
     try {
+      // Formatar a data
       const formattedDate = typeof date === 'string' ? date : format(date, 'yyyy-MM-dd');
       
+      // Preparar os dados para enviar
       const data = {
         status,
         date: formattedDate
@@ -136,10 +138,10 @@ export const TaskProvider = ({ children }) => {
         data.notes = notes;
       }
       
+      // Fazer a chamada à API
       const response = await TaskService.updateTaskStatus(taskId, data);
       
-      // Make sure we're updating the local state after the API call
-      // This ensures the UI reflects the changes immediately
+      // Atualizar o estado local para refletir a mudança imediatamente
       setTasks(prevTasks => 
         prevTasks.map(task => 
           String(task.id) === String(taskId)
@@ -148,7 +150,7 @@ export const TaskProvider = ({ children }) => {
         )
       );
       
-      // Also update todayTasks if the updated task is for today
+      // Também atualizar todayTasks se a data for hoje
       const today = format(new Date(), 'yyyy-MM-dd');
       if (formattedDate === today) {
         fetchTodayTasks();

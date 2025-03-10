@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   PlusIcon, 
@@ -9,11 +9,14 @@ import {
   ClockIcon, 
   ArrowPathIcon,
   PencilIcon,
-  TrashIcon
+  TrashIcon,
+  ChevronDownIcon,
+  ChevronUpIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 
 import TaskService from '../services/TaskService';
+import TaskStatusBadge from '../components/tasks/TaskStatusBadge';
 import EmptyState from '../components/common/EmptyState';
 
 export default function Goals() {
@@ -22,6 +25,9 @@ export default function Goals() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('active'); // active, completed, all
   const [periodFilter, setPeriodFilter] = useState('all'); // all, weekly, monthly, quarterly, biannual, yearly
+  const [expandedGoalId, setExpandedGoalId] = useState(null);
+  const [relatedTasks, setRelatedTasks] = useState({});
+  const [loadingTasks, setLoadingTasks] = useState({});
   
   useEffect(() => {
     fetchGoals();
@@ -99,6 +105,67 @@ export default function Goals() {
       toast.error('Erro ao atualizar progresso');
     }
   };
+
+  const toggleGoalTasks = async (goalId) => {
+    if (expandedGoalId === goalId) {
+      setExpandedGoalId(null);
+      return;
+    }
+    
+    setExpandedGoalId(goalId);
+    
+    // Se ainda não carregamos as tarefas desta meta, vamos carregá-las
+    if (!relatedTasks[goalId]) {
+      setLoadingTasks({...loadingTasks, [goalId]: true});
+      try {
+        const response = await TaskService.getTasksByGoal(goalId);
+        setRelatedTasks({
+          ...relatedTasks,
+          [goalId]: response.data
+        });
+      } catch (error) {
+        console.error('Error fetching goal tasks:', error);
+        toast.error('Erro ao carregar tarefas relacionadas');
+      } finally {
+        setLoadingTasks({...loadingTasks, [goalId]: false});
+      }
+    }
+  };
+
+  // Renderiza uma tarefa relacionada à meta
+  const renderTaskItem = (task) => {
+    return (
+      <div 
+        key={task.id}
+        className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-2"
+      >
+        <div className="flex justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white">{task.title}</h4>
+            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {formatDate(task.date)} • {task.start_time.substring(0, 5)} - {task.end_time.substring(0, 5)}
+            </div>
+          </div>
+          <TaskStatusBadge status={task.status} />
+        </div>
+        
+        {task.actual_value && (
+          <div className="mt-2 text-xs font-medium text-gray-900 dark:text-white">
+            Progresso: {task.actual_value} {task.goal_unit || ''}
+          </div>
+        )}
+        
+        <div className="mt-2 flex justify-end">
+          <Link
+            to={`/task/edit/${task.id}`}
+            className="text-xs text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+          >
+            Ver detalhes
+          </Link>
+        </div>
+      </div>
+    );
+  };
   
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -107,6 +174,10 @@ export default function Goals() {
   
   // Renderiza um card de meta
   const renderGoalCard = (goal) => {
+    const isExpanded = expandedGoalId === goal.id;
+    const tasks = relatedTasks[goal.id] || [];
+    const isLoading = loadingTasks[goal.id] || false;
+    
     return (
       <div 
         key={goal.id} 
@@ -154,7 +225,7 @@ export default function Goals() {
                 De {formatDate(goal.start_date)} até {formatDate(goal.end_date)}
               </div>
               <div className="font-medium">
-                {goal.current_value} / {goal.target_value} ({Math.round(goal.progress_percentage)}%)
+                {goal.current_value} / {goal.target_value} ({Math.round((goal.current_value / goal.target_value) * 100)}%)
               </div>
             </div>
             
@@ -163,7 +234,7 @@ export default function Goals() {
                 className={`${
                   goal.is_completed ? 'bg-green-600' : 'bg-primary-600'
                 } h-2.5 rounded-full`} 
-                style={{ width: `${Math.min(goal.progress_percentage, 100)}%` }}
+                style={{ width: `${Math.min((goal.current_value / goal.target_value) * 100, 100)}%` }}
               ></div>
             </div>
           </div>
@@ -181,6 +252,23 @@ export default function Goals() {
               >
                 <ArrowPathIcon className="h-4 w-4 mr-1" />
                 Atualizar
+              </button>
+              
+              <button
+                onClick={() => toggleGoalTasks(goal.id)}
+                className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 dark:border-gray-600 text-xs font-medium rounded text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                {isExpanded ? (
+                  <>
+                    <ChevronUpIcon className="h-4 w-4 mr-1" />
+                    Ocultar tarefas
+                  </>
+                ) : (
+                  <>
+                    <ChevronDownIcon className="h-4 w-4 mr-1" />
+                    Ver tarefas
+                  </>
+                )}
               </button>
             </div>
             
@@ -200,6 +288,38 @@ export default function Goals() {
             </div>
           </div>
         </div>
+        
+        {/* Seção de tarefas relacionadas */}
+        {isExpanded && (
+          <div className="px-5 pb-5 border-t border-gray-200 dark:border-gray-700 mt-3 pt-3">
+            <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
+              Tarefas relacionadas
+            </h4>
+            
+            {isLoading ? (
+              <div className="flex justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary-500"></div>
+              </div>
+            ) : tasks.length > 0 ? (
+              <div className="space-y-2">
+                {tasks.map(task => renderTaskItem(task))}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
+                Nenhuma tarefa relacionada encontrada.
+                <div className="mt-2">
+                  <Link 
+                    to="/task/new" 
+                    className="inline-flex items-center text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                  >
+                    <PlusIcon className="h-4 w-4 mr-1" />
+                    Criar nova tarefa
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -212,7 +332,7 @@ export default function Goals() {
         
         <div className="flex space-x-2">
           <Link
-            to="goal/new"
+            to="/goal/new"
             className="inline-flex items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             <PlusIcon className="h-4 w-4 mr-1" />

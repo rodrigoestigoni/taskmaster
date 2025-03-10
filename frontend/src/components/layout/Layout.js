@@ -126,7 +126,7 @@ export default function Layout() {
                 {/* Add Task Button */}
                 <div className="px-3 pt-4 pb-2">
                   <Link
-                    to="task/new"
+                    to="/task/new"
                     onClick={handleNavClick}
                     className="flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
@@ -175,7 +175,7 @@ export default function Layout() {
                 {/* Add Task Button */}
                 <div className="px-3 pt-2 pb-4">
                   <Link
-                    to="task/new"
+                    to="/task/new"
                     className="flex items-center justify-center w-full px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     <PlusIcon className="w-5 h-5 mr-2" />

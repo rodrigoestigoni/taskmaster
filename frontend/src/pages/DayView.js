@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { format, addDays, subDays, parseISO } from 'date-fns';
+import axios from 'axios';
+import { Link, useLocation } from 'react-router-dom';
+import { format, addDays, subDays, parseISO, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   ChevronLeftIcon, 
   ChevronRightIcon, 
   CalendarIcon, 
-  ClockIcon,
   CheckIcon,
+  FaceFrownIcon,
   XMarkIcon,
   PauseIcon,
   PlayIcon,
@@ -23,12 +24,23 @@ import { useTasks } from '../context/TaskContext';
 import TaskStatusBadge from '../components/tasks/TaskStatusBadge';
 import TaskPriorityBadge from '../components/tasks/TaskPriorityBadge';
 import EmptyState from '../components/common/EmptyState';
+import DeleteTaskModal from '../components/common/DeleteTaskModal';
 
 export default function DayView() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const dateParam = queryParams.get('date');
+  
+  const [selectedDate, setSelectedDate] = useState(
+    dateParam ? parseISO(dateParam) : new Date()
+  );
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const { updateTaskStatus } = useTasks();
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState(null);
+
   
   // Formata a data para exibição
   const formattedDate = format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR });
@@ -74,12 +86,88 @@ export default function DayView() {
   
   const handleStatusChange = async (taskId, newStatus, actualValue = null, notes = null) => {
     try {
-      await updateTaskStatus(taskId, newStatus, selectedDate, actualValue, notes);
+      // Obtenha o token de autenticação
+      const token = localStorage.getItem('accessToken');
+      
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+      
+      // Prepare os dados da requisição
+      const data = {
+        status: newStatus,
+        date: format(selectedDate, 'yyyy-MM-dd')
+      };
+      
+      // Adicione valores opcionais se fornecidos
+      if (actualValue !== null) data.actual_value = actualValue;
+      if (notes) data.notes = notes;
+      
+      // Faça a requisição diretamente com axios
+      const response = await axios.post(
+        `/api/tasks/${taskId}/update_status/`,
+        data,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+      
+      // Atualize imediatamente o estado local
+      setTasks(prevTasks => 
+        prevTasks.map(t => 
+          t.id === taskId ? { ...t, status: newStatus } : t
+        )
+      );
+      
+      // Mostre mensagem de sucesso
       toast.success('Status atualizado com sucesso');
+      
+      // Atualize a lista de tarefas
+      await fetchTasks();
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error);
+      toast.error('Erro ao atualizar status');
+    }
+  };
+
+  const handleDeleteTask = (taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    // Armazenar a tarefa para excluir e abrir o modal
+    setTaskToDelete(task);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async (mode) => {
+    if (!taskToDelete) return;
+    
+    try {
+      if (taskToDelete.repeat_pattern && taskToDelete.repeat_pattern !== 'none') {
+        // Tarefa recorrente - usar o endpoint específico com o modo selecionado
+        const date = taskToDelete.date || format(selectedDate, 'yyyy-MM-dd');
+        await TaskService.deleteRecurringTask(taskToDelete.id, mode, date);
+      } else {
+        // Tarefa normal
+        await TaskService.deleteTask(taskToDelete.id);
+      }
+      
+      toast.success('Tarefa excluída com sucesso');
+      
+      // Remover a tarefa do estado local para atualização imediata da UI
+      setTasks(tasks.filter(task => task.id !== taskToDelete.id));
+      
+      // Recarregar tarefas para garantir sincronização completa
       fetchTasks();
     } catch (error) {
-      console.error('Error updating task status:', error);
-      toast.error('Erro ao atualizar status');
+      console.error('Error deleting task:', error);
+      toast.error('Erro ao excluir tarefa');
+    } finally {
+      // Fechar o modal e limpar a tarefa selecionada
+      setDeleteModalOpen(false);
+      setTaskToDelete(null);
     }
   };
   
@@ -116,10 +204,16 @@ export default function DayView() {
   
   // Renderiza o card de uma tarefa
   const renderTaskCard = (task) => {
+    console.log(`Renderizando tarefa (id=${task.id}): status=${task.status}`);
     const startTime = formatTime(task.start_time);
     const endTime = formatTime(task.end_time);
+
+    const isToday = task.date ? format(parseISO(task.date), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') : true;
+
+    const isCompleted = task.status === 'completed';
     
-    // Cor de fundo baseada na categoria
+    const isRecurring = task.repeat_pattern && task.repeat_pattern !== 'none';
+
     const categoryColor = task.category_color || '#4F46E5';
     
     return (
@@ -129,69 +223,119 @@ export default function DayView() {
       >
         <div className="h-2" style={{ backgroundColor: categoryColor }}></div>
         <div className="p-4">
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">{task.title}</h3>
-              <div className="mt-1 flex items-center text-sm text-gray-500 dark:text-gray-400">
-                <ClockIcon className="flex-shrink-0 mr-1.5 h-4 w-4" />
-                <span>{startTime} - {endTime}</span>
-                <span className="mx-2">•</span>
-                <span>{task.duration_minutes} min</span>
-              </div>
-            </div>
-            <TaskPriorityBadge priority={task.priority} />
-          </div>
           
-          {task.description && (
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{task.description}</p>
-          )}
-          
-          <div className="mt-3 flex items-center">
-            <span 
-              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mr-2"
-              style={{ backgroundColor: `${categoryColor}20`, color: categoryColor }}
-            >
-              {task.category_name}
-            </span>
-            <TaskStatusBadge status={task.status} />
+        <div className="flex justify-between items-start">
+          <div className="flex-1 flex items-center">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">{task.title}</h3>
+            
+            {/* Indicador de tarefa recorrente */}
+            {isRecurring && (
+              <span 
+                className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                title={`Recorrência: ${
+                  task.repeat_pattern === 'daily' ? 'Diária' :
+                  task.repeat_pattern === 'weekly' ? 'Semanal' :
+                  task.repeat_pattern === 'monthly' ? 'Mensal' :
+                  task.repeat_pattern === 'weekdays' ? 'Dias úteis' :
+                  task.repeat_pattern === 'weekends' ? 'Finais de semana' :
+                  task.repeat_pattern === 'custom' ? 'Personalizada' : 'Recorrente'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Recorrente
+              </span>
+            )}
           </div>
-          
-          <div className="mt-4 flex justify-between">
-            <div className="flex space-x-2">
-              {/* Buttons to change status */}
-              <button
-                onClick={() => handleStatusChange(task.id, 'completed')}
-                className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                title="Marcar como concluída"
-              >
-                <CheckIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <button
-                onClick={() => handleStatusChange(task.id, 'in_progress')}
-                className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                title="Marcar em andamento"
-              >
-                <PlayIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <button
-                onClick={() => handleStatusChange(task.id, 'failed')}
-                className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                title="Marcar como falha"
-              >
-                <XMarkIcon className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="flex space-x-2">
-              <Link
-                to={`/task/edit/${task.id}`}
-                className="inline-flex items-center p-1 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                title="Editar tarefa"
-              >
-                <PencilIcon className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </div>
-          </div>
+          <TaskPriorityBadge priority={task.priority} />
         </div>
+        
+        <div className="mt-1 flex items-center text-sm text-gray-500 dark:text-gray-400">
+          <PlayIcon className="flex-shrink-0 mr-1.5 h-4 w-4" />
+          <span>{startTime} - {endTime}</span>
+          <span className="mx-2">•</span>
+          <span>{task.duration_minutes} min</span>
+        </div>
+        
+        {task.description && (
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{task.description}</p>
+        )}
+        
+        <div className="mt-3 flex items-center">
+          <span 
+            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mr-2"
+            style={{ backgroundColor: `${categoryColor}20`, color: categoryColor }}
+          >
+            {task.category_name}
+          </span>
+          <TaskStatusBadge status={task.status} />
+        </div>
+          
+          <div className="flex space-x-2">
+            {/* Botões para alterar status - mostrar apenas para tarefas de hoje que não estão concluídas */}
+            {isToday && !isCompleted ? (
+              <>
+                <button
+                  onClick={() => handleStatusChange(task.id, 'completed')}
+                  className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  title="Marcar como concluída"
+                >
+                  <CheckIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  onClick={() => handleStatusChange(task.id, 'in_progress')}
+                  className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  title="Marcar em andamento"
+                >
+                  <PlayIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  onClick={() => handleStatusChange(task.id, 'failed')}
+                  className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500"
+                  title="Marcar como não realizada"
+                >
+                  <FaceFrownIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </>
+            ) : isToday && isCompleted ? (
+              // Para tarefas concluídas, mostrar uma mensagem ou apenas deixar vazio
+              <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
+                <CheckIcon className="h-4 w-4 mr-1" />
+                Concluída
+              </span>
+            ) : (
+              // Para tarefas de outros dias
+              <span className="text-xs text-gray-500 dark:text-gray-400 italic">
+                {format(parseISO(task.date), 'dd/MM/yyyy')}
+              </span>
+            )}
+          </div>
+          {/* Botão de edição sempre disponível */}
+          <Link
+              to={`/task/edit/${task.id}`}
+              className="inline-flex items-center p-1 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              title="Editar tarefa"
+            >
+              <PencilIcon className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            
+            {/* Botão de exclusão sempre disponível */}
+            <button
+              onClick={() => handleDeleteTask(task.id)}
+              className="inline-flex items-center p-1 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              title="Excluir tarefa"
+            >
+              <TrashIcon className="h-4 w-4" aria-hidden="true" />
+            </button>
+          
+        </div>
+        <DeleteTaskModal
+          isOpen={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          onConfirm={handleDeleteConfirm}
+          isRecurring={taskToDelete?.repeat_pattern && taskToDelete.repeat_pattern !== 'none'}
+        />
       </div>
     );
   };
@@ -247,7 +391,7 @@ export default function DayView() {
             <span>Atualizar</span>
           </button>
           <Link
-            to="task/new"
+            to="/task/new"
             className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             <PlusIcon className="h-4 w-4 mr-1" />

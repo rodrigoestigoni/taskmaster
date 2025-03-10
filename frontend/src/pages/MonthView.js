@@ -57,14 +57,18 @@ export default function MonthView() {
   const fetchMonthTasks = async () => {
     setLoading(true);
     try {
-      const formattedStartDate = format(monthStart, 'yyyy-MM-dd');
-      const formattedEndDate = format(monthEnd, 'yyyy-MM-dd');
+      const selectedYear = selectedDate.getFullYear();
+      const selectedMonth = selectedDate.getMonth() + 1; // getMonth() retorna 0-11
       
-      const response = await TaskService.getTasksByDateRange(
-        formattedStartDate, 
-        formattedEndDate
+      console.log(`Buscando tarefas do mês: ${selectedYear}/${selectedMonth}`);
+      
+      // Usar o novo método que envia o ano e mês como parâmetros para o backend
+      const response = await TaskService.getMonthTasksByYearMonth(
+        selectedYear,
+        selectedMonth
       );
       
+      console.log(`${response.data.length} tarefas encontradas`);
       setMonthTasks(response.data);
     } catch (error) {
       console.error('Error fetching month tasks:', error);
@@ -230,7 +234,7 @@ export default function MonthView() {
             <span>Atualizar</span>
           </button>
           <Link
-            to="task/new"
+            to="/task/new"
             className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             <PlusIcon className="h-4 w-4 mr-1" />

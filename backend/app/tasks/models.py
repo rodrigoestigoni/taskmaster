@@ -70,6 +70,7 @@ class Goal(models.Model):
         """Atualiza o progresso percentual com base no valor atual e alvo"""
         if self.target_value > 0:
             self.progress_percentage = (self.current_value / self.target_value) * 100
+            self.progress_percentage = round(self.progress_percentage, 2)  # Arredondar para 2 casas decimais
             if self.progress_percentage >= 100:
                 self.is_completed = True
                 self.progress_percentage = 100
@@ -148,9 +149,10 @@ class Task(models.Model):
                 
             self.duration_minutes = end_minutes - start_minutes
         
+        # Salvar a tarefa
         super().save(*args, **kwargs)
         
-        # Atualizar meta associada se existir
+        # Atualizar meta associada se existir e se a tarefa foi concluída
         if self.goal and self.status == 'completed' and self.actual_value:
             self.goal.current_value += self.actual_value
             self.goal.update_progress()

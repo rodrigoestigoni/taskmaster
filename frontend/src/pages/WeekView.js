@@ -7,7 +7,10 @@ import {
   ChevronRightIcon, 
   CalendarIcon, 
   PlusIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 
@@ -21,6 +24,7 @@ export default function WeekView() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [weekTasks, setWeekTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [expandedDays, setExpandedDays] = useState([]); // Array para controlar múltiplos dias expandidos no desktop
   const { updateTaskStatus } = useTasks();
   
   // Obtém o início e fim da semana para a data selecionada
@@ -32,6 +36,20 @@ export default function WeekView() {
   
   useEffect(() => {
     fetchWeekTasks();
+    
+    // Inicialmente, expanda o dia atual se estiver na semana atual
+    const today = new Date();
+    const isTodayInCurrentWeek = weekDays.some(day => isToday(day));
+    
+    if (isTodayInCurrentWeek) {
+      const todayIndex = weekDays.findIndex(day => isToday(day));
+      if (todayIndex !== -1) {
+        setExpandedDays([todayIndex]);
+      }
+    } else {
+      // Se não estiver na semana atual, expanda o primeiro dia
+      setExpandedDays([0]);
+    }
   }, [selectedDate]);
   
   const fetchWeekTasks = async () => {
@@ -40,11 +58,15 @@ export default function WeekView() {
       const formattedStartDate = format(startDate, 'yyyy-MM-dd');
       const formattedEndDate = format(endDate, 'yyyy-MM-dd');
       
-      const response = await TaskService.getTasksByDateRange(
+      console.log(`Buscando tarefas da semana: ${formattedStartDate} a ${formattedEndDate}`);
+      
+      // Usar o novo método que envia as datas como parâmetros para o backend
+      const response = await TaskService.getWeekTasksByDateRange(
         formattedStartDate, 
         formattedEndDate
       );
       
+      console.log(`${response.data.length} tarefas encontradas`);
       setWeekTasks(response.data);
     } catch (error) {
       console.error('Error fetching week tasks:', error);
@@ -78,94 +100,143 @@ export default function WeekView() {
     return weekTasks.filter(task => task.date === formattedDate);
   };
   
+  // Função para excluir uma tarefa
+  const handleDeleteTask = async (taskId) => {
+    if (window.confirm('Tem certeza que deseja excluir esta tarefa?')) {
+      try {
+        await TaskService.deleteTask(taskId);
+        toast.success('Tarefa excluída com sucesso');
+        // Atualizar a lista de tarefas após excluir
+        fetchWeekTasks();
+      } catch (error) {
+        console.error('Error deleting task:', error);
+        toast.error('Erro ao excluir tarefa');
+      }
+    }
+  };
+  
   // Renderiza um card de tarefa
   const renderTaskCard = (task) => {
     return (
       <div 
         key={task.id} 
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 mb-2 border-l-4"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 mb-2 border-l-4 hover:shadow-md transition-shadow"
         style={{ borderLeftColor: task.category_color || '#8b5cf6' }}
       >
-        <div className="flex justify-between">
-          <h3 className="text-sm font-medium truncate text-gray-900 dark:text-white">
+        <div className="flex justify-between items-start">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white">
             {task.title}
           </h3>
           <TaskPriorityBadge priority={task.priority} />
         </div>
         
         <div className="mt-1 flex items-center text-xs text-gray-500 dark:text-gray-400">
+          <ClockIcon className="h-3 w-3 mr-1" />
           <span>{formatTime(task.start_time)} - {formatTime(task.end_time)}</span>
         </div>
         
         <div className="mt-2 flex justify-between items-center">
           <TaskStatusBadge status={task.status} />
           
-          <Link
-            to={`/task/edit/${task.id}`}
-            className="text-xs text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
-          >
-            Detalhes
-          </Link>
+          <div className="flex space-x-2">
+            <Link
+              to={`/task/edit/${task.id}`}
+              className="text-xs text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+            >
+              Editar
+            </Link>
+            <button
+              onClick={() => handleDeleteTask(task.id)}
+              className="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+            >
+              Excluir
+            </button>
+          </div>
         </div>
       </div>
     );
   };
   
-  // Renderiza um dia da semana
-  const renderDay = (date) => {
+  // Manipula a expansão de um dia
+  const toggleDayExpansion = (index) => {
+    setExpandedDays(prev => {
+      // Na versão desktop, permitimos múltiplos dias expandidos
+      if (prev.includes(index)) {
+        return prev.filter(i => i !== index);
+      } else {
+        return [...prev, index];
+      }
+    });
+  };
+
+  // Renderiza um dia da semana com acordeão (para desktop e mobile)
+  const renderAccordionDay = (date, index) => {
     const dayTasks = getTasksForDay(date);
-    const formattedDay = format(date, 'EEE', { locale: ptBR });
+    const formattedDay = format(date, 'EEEE', { locale: ptBR });
     const formattedDate = format(date, 'dd/MM');
     const isCurrentDay = isToday(date);
+    const isExpanded = expandedDays.includes(index);
     
     return (
       <div 
         key={date.toString()} 
-        className={`bg-white dark:bg-gray-800 rounded-lg shadow p-3 ${
+        className={`mb-3 rounded-lg shadow ${
           isCurrentDay 
             ? 'ring-2 ring-primary-500 dark:ring-primary-400' 
             : ''
         }`}
       >
-        <div className={`text-center mb-3 pb-2 border-b ${
-          isCurrentDay 
-            ? 'border-primary-500 dark:border-primary-400' 
-            : 'border-gray-200 dark:border-gray-700'
-        }`}>
-          <h3 className={`text-sm font-semibold capitalize ${
+        <button
+          onClick={() => toggleDayExpansion(index)}
+          className={`w-full flex items-center justify-between p-4 ${
             isCurrentDay 
-              ? 'text-primary-600 dark:text-primary-400' 
-              : 'text-gray-800 dark:text-gray-200'
-          }`}>
-            {formattedDay}
-          </h3>
-          <span className={`text-xs ${
-            isCurrentDay 
-              ? 'text-primary-600 dark:text-primary-400' 
-              : 'text-gray-500 dark:text-gray-400'
-          }`}>
-            {formattedDate}
-          </span>
-        </div>
-        
-        <div className="space-y-2 max-h-[500px] overflow-y-auto">
-          {dayTasks.length > 0 ? (
-            dayTasks.map(task => renderTaskCard(task))
+              ? 'bg-primary-50 dark:bg-primary-900 text-primary-700 dark:text-primary-300' 
+              : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+          } rounded-lg ${!isExpanded ? 'rounded-b-lg' : ''}`}
+        >
+          <div className="flex flex-col items-start">
+            <h3 className="text-sm font-semibold capitalize">
+              {formattedDay}
+            </h3>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {formattedDate} • {dayTasks.length} tarefas
+            </span>
+          </div>
+          {isExpanded ? (
+            <ChevronUpIcon className="h-5 w-5" />
           ) : (
-            <div className="text-center text-xs text-gray-500 dark:text-gray-400 py-4">
-              Sem tarefas
-            </div>
+            <ChevronDownIcon className="h-5 w-5" />
           )}
-        </div>
+        </button>
         
-        <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-700 text-center">
-          <Link
-            to={{ pathname: "/day", state: { date } }}
-            className="text-xs text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
-          >
-            Ver dia
-          </Link>
-        </div>
+        {isExpanded && (
+          <div className="p-4 bg-white dark:bg-gray-800 rounded-b-lg border-t border-gray-200 dark:border-gray-700">
+            <div className="space-y-3">
+              {dayTasks.length > 0 ? (
+                dayTasks.map(task => renderTaskCard(task))
+              ) : (
+                <div className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">
+                  Sem tarefas para este dia
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 flex justify-between">
+              <Link
+                to={`/day?date=${format(date, 'yyyy-MM-dd')}`}
+                className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+              >
+                Ver detalhes do dia
+              </Link>
+              <Link
+                to="/task/new"
+                className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+              >
+                Nova tarefa
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -173,7 +244,7 @@ export default function WeekView() {
   return (
     <div>
       {/* Header com navegação */}
-      <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center space-x-4">
           <button
             onClick={handlePreviousWeek}
@@ -181,8 +252,8 @@ export default function WeekView() {
           >
             <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
           </button>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-            {format(startDate, "dd 'de' MMMM", { locale: ptBR })} - {format(endDate, "dd 'de' MMMM", { locale: ptBR })}
+          <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
+            {format(startDate, "dd/MM", { locale: ptBR })} - {format(endDate, "dd/MM", { locale: ptBR })}
           </h1>
           <button
             onClick={handleNextWeek}
@@ -206,7 +277,7 @@ export default function WeekView() {
             <span>Atualizar</span>
           </button>
           <Link
-            to="task/new"
+            to="/task/new"
             className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             <PlusIcon className="h-4 w-4 mr-1" />
@@ -225,12 +296,12 @@ export default function WeekView() {
           title="Sem tarefas para esta semana"
           description="Não há tarefas planejadas para esta semana. Que tal adicionar alguma?"
           buttonText="Adicionar Tarefa"
-          buttonLink="task/new"
+          buttonLink="/task/new"
           icon={<CalendarIcon className="h-12 w-12 text-gray-400" />}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
-          {weekDays.map(day => renderDay(day))}
+        <div className="space-y-3">
+          {weekDays.map((day, index) => renderAccordionDay(day, index))}
         </div>
       )}
     </div>

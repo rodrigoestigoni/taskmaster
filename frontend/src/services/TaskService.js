@@ -39,7 +39,42 @@ const TaskService = {
    * @returns {Promise} - Promessa com a lista de tarefas da data
    */
   getTasksByDate: async (date) => {
-    return apiClient.get(`/tasks/?date=${date}`);
+    return apiClient.get(`/tasks/today/?date=${date}`);
+  },
+
+  /**
+   * Excluir tarefa recorrente com diferentes modos
+   * @param {number} id - ID da tarefa
+   * @param {string} mode - Modo de exclusão: 'only_this', 'this_and_future', 'all'
+   * @param {string} date - Data da ocorrência (formato YYYY-MM-DD)
+   * @returns {Promise} - Promessa com a resposta da exclusão
+   */
+  deleteRecurringTask: async (id, mode, date = null) => {
+    let url = `/tasks/${id}/delete_recurring/?mode=${mode}`;
+    if (date && mode !== 'all') {
+      url += `&date=${date}`;
+    }
+    return apiClient.delete(url);
+  },
+
+  /**
+   * Buscar tarefas da semana com datas específicas
+   * @param {string} startDate - Data inicial no formato YYYY-MM-DD
+   * @param {string} endDate - Data final no formato YYYY-MM-DD
+   * @returns {Promise} - Promessa com a lista de tarefas da semana
+   */
+  getWeekTasksByDateRange: async (startDate, endDate) => {
+    return apiClient.get(`/tasks/week/?start_date=${startDate}&end_date=${endDate}`);
+  },
+
+  /**
+   * Buscar tarefas do mês específico
+   * @param {number} year - Ano (ex: 2024)
+   * @param {number} month - Mês (1-12)
+   * @returns {Promise} - Promessa com a lista de tarefas do mês
+   */
+  getMonthTasksByYearMonth: async (year, month) => {
+    return apiClient.get(`/tasks/month/?year=${year}&month=${month}`);
   },
   
   /**
@@ -59,6 +94,14 @@ const TaskService = {
    */
   getTask: async (id) => {
     return apiClient.get(`/tasks/${id}/`);
+  },
+
+  getTaskOccurrence: async (taskId, date) => {
+    return apiClient.get(`/tasks/${taskId}/occurrence/?date=${date}`);
+  },
+
+  getTasksByGoal: async (goalId) => {
+    return apiClient.get(`/goals/${goalId}/related_tasks/`);
   },
   
   /**
@@ -87,7 +130,40 @@ const TaskService = {
    * @returns {Promise} - Promessa com os dados atualizados
    */
   updateTaskStatus: async (id, statusData) => {
-    return apiClient.post(`/tasks/${id}/update_status/`, statusData);
+    console.log(`TaskService.updateTaskStatus iniciado: id=${id}`, statusData);
+    
+    // Garantir que temos um objeto statusData válido
+    let data = statusData;
+    
+    // Se o statusData for uma string, converte para objeto
+    if (typeof statusData === 'string') {
+      console.log('Convertendo string para objeto:', statusData);
+      data = { status: statusData };
+    }
+    // Se não for um objeto, cria um objeto
+    else if (!statusData || typeof statusData !== 'object') {
+      console.error('Dados de status inválidos:', statusData);
+      throw new Error('Dados de status inválidos');
+    }
+    
+    // Verificar se o status está presente
+    if (data.status === undefined) {
+      console.error('Status não definido nos dados:', data);
+      throw new Error('Status não definido nos dados');
+    }
+    
+    // Log detalhado
+    console.log(`Chamando API para atualizar status: id=${id}, status=${data.status}`, data);
+    
+    try {
+      // Chamar a API com dados explícitos
+      const response = await apiClient.post(`/tasks/${id}/update_status/`, data);
+      console.log('API respondeu com sucesso:', response.data);
+      return response;
+    } catch (error) {
+      console.error('Erro na chamada de API updateTaskStatus:', error);
+      throw error;
+    }
   },
   
   /**

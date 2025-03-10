@@ -2,6 +2,28 @@ import axios from 'axios';
 
 const API_URL = '/api';
 
+
+const logApiCall = (config) => {
+  console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, config.data || {});
+  return config;
+};
+
+const logApiResponse = (response) => {
+  console.log(`API Response: ${response.status} ${response.statusText}`, response.data);
+  return response;
+};
+
+const logApiError = (error) => {
+  if (error.response) {
+    console.error(`API Error: ${error.response.status} ${error.response.statusText}`, error.response.data);
+  } else if (error.request) {
+    console.error('API Error: No response received', error.request);
+  } else {
+    console.error('API Error:', error.message);
+  }
+  return Promise.reject(error);
+};
+
 // Criar instância do axios com configuração base
 const apiClient = axios.create({
   baseURL: API_URL,
@@ -10,6 +32,11 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Adicione os interceptors
+apiClient.interceptors.request.use(logApiCall, logApiError);
+apiClient.interceptors.response.use(logApiResponse, logApiError);
+
 
 // Interceptor para adicionar token de autenticação
 apiClient.interceptors.request.use(
