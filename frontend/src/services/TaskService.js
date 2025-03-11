@@ -196,8 +196,9 @@ const TaskService = {
      * @param {Object} taskData - Dados da tarefa
      * @returns {Promise} - Promessa com os dados da tarefa criada
      */
-    createTask: async (taskData) => {
-      return apiClient.post('/tasks/', taskData);
+    createTask: async (taskData, ignoreOverlap = false) => {
+      const url = ignoreOverlap ? '/tasks/?ignore_overlap=true' : '/tasks/';
+      return apiClient.post(url, taskData);
     },
     
     /**
@@ -206,8 +207,9 @@ const TaskService = {
      * @param {Object} taskData - Dados atualizados da tarefa
      * @returns {Promise} - Promessa com os dados da tarefa atualizada
      */
-    updateTask: async (id, taskData) => {
-      return apiClient.put(`/tasks/${id}/`, taskData);
+    updateTask: async (id, taskData, ignoreOverlap = false) => {
+      const url = ignoreOverlap ? `/tasks/${id}/?ignore_overlap=true` : `/tasks/${id}/`;
+      return apiClient.put(url, taskData);
     },
     
     /**

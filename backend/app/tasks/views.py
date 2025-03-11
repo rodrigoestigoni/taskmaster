@@ -287,6 +287,20 @@ class TaskViewSet(viewsets.ModelViewSet):
         """Salva a tarefa atribuindo o usuário atual"""
         serializer.save(user=self.request.user)
     
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        
+        # Verificar se a tarefa está concluída e tem meta associada
+        if instance.status == 'completed' and instance.goal and instance.actual_value:
+            # Subtrair o valor da meta
+            goal = instance.goal
+            goal.current_value -= instance.actual_value
+            goal.update_progress()
+            print(f"[DEBUG] Ajustando meta ao excluir tarefa: Subtraindo {instance.actual_value} da meta {goal.id}")
+        
+        # Excluir a tarefa
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
     
     @action(detail=False, methods=['get'])
     def day(self, request):
@@ -918,10 +932,17 @@ class TaskViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
         
-        # Caso 1: Excluir apenas a ocorrência específica
         if delete_mode == 'only_this':
             try:
                 occurrence = TaskOccurrence.objects.get(task=task, date=date)
+                
+                # Se a ocorrência está concluída e tem meta, ajustar a meta
+                if occurrence.status == 'completed' and task.goal and occurrence.actual_value:
+                    goal = task.goal
+                    goal.current_value -= occurrence.actual_value
+                    goal.update_progress()
+                    print(f"[DEBUG] Ajustando meta ao excluir ocorrência: {occurrence.actual_value} removido")
+                
                 occurrence.delete()
                 return Response(status=status.HTTP_204_NO_CONTENT)
             except TaskOccurrence.DoesNotExist:
@@ -1136,60 +1157,54 @@ class TaskViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
-    # No método update do TaskViewSet
     def update(self, request, *args, **kwargs):
-        """Atualizar tarefa com verificação de sobreposição e suporte a tarefas recorrentes"""
-        # Recuperar a instância
         instance = self.get_object()
         
-        # Verificar se é para tratar como tarefa recorrente
-        mode = request.query_params.get('mode')
-        occurrence_date = request.query_params.get('date')
+        # Salvar valores antigos
+        old_status = instance.status
+        old_actual_value = instance.actual_value or 0
+        old_goal_id = instance.goal.id if instance.goal else None
         
-        # Se for tarefa recorrente e tiver modo especificado, tratar de forma especial
-        if instance.repeat_pattern and instance.repeat_pattern != 'none' and mode:
-            return self.update_recurring_task(instance, request, mode, occurrence_date)
-        
-        # Verificar sobreposição de horários
-        date = request.data.get('date', instance.date)
-        start_time = request.data.get('start_time', instance.start_time)
-        end_time = request.data.get('end_time', instance.end_time)
-        
-        # Adicionar um parâmetro opcional para ignorar a verificação de sobreposição
-        ignore_overlap = request.query_params.get('ignore_overlap', 'false').lower() == 'true'
-        
-        if not ignore_overlap and date and start_time and end_time:
-            overlapping_task = check_task_overlap(
-                user=request.user,
-                date=date,
-                start_time=start_time,
-                end_time=end_time,
-                exclude_task_id=instance.id  # Excluir a própria tarefa da verificação
-            )
-            
-            if overlapping_task:
-                # Retornar erro com detalhes da sobreposição
-                return Response({
-                    'error': 'Sobreposição de horário detectada',
-                    'overlapping_task': {
-                        'id': overlapping_task.id,
-                        'title': overlapping_task.title,
-                        'start_time': overlapping_task.start_time,
-                        'end_time': overlapping_task.end_time,
-                        'date': overlapping_task.date
-                    }
-                }, status=status.HTTP_409_CONFLICT)
-        
-        # Se não houver sobreposição ou se for para ignorar, continuar com a atualização
+        # Atualizar a tarefa
         serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         
-        if getattr(instance, '_prefetched_objects_cache', None):
-            # Se '_prefetched_objects_cache' existir, e neste caso queremos
-            # limpar a prefetched relation para que a instância serializada
-            # retorne dados atualizados.
-            instance._prefetched_objects_cache = {}
+        # Verificar se houve alteração relevante para a meta
+        if instance.goal:
+            # Caso 1: Mesma meta, verifica mudanças de valor ou status
+            if old_goal_id == instance.goal.id:
+                if old_status == 'completed' and instance.status == 'completed' and instance.actual_value != old_actual_value:
+                    # Ajustar a diferença
+                    diff = (instance.actual_value or 0) - old_actual_value
+                    if diff != 0:
+                        goal = instance.goal
+                        goal.current_value += diff
+                        goal.update_progress()
+                        print(f"[DEBUG] Ajustando meta: {diff} adicionado à meta {goal.id}. Valor atual: {goal.current_value}")
+                elif old_status == 'completed' and instance.status != 'completed':
+                    # Tarefa não está mais concluída, remover valor
+                    goal = instance.goal
+                    goal.current_value -= old_actual_value
+                    goal.update_progress()
+                    print(f"[DEBUG] Removendo valor da meta: {old_actual_value} removido da meta {goal.id}")
+            # Caso 2: Mudou de meta
+            elif old_goal_id:
+                from .models import Goal
+                old_goal = Goal.objects.get(id=old_goal_id)
+                # Remover da meta antiga se estava concluída
+                if old_status == 'completed' and old_actual_value:
+                    old_goal.current_value -= old_actual_value
+                    old_goal.update_progress()
+                    print(f"[DEBUG] Removendo da meta antiga: {old_actual_value} removido da meta {old_goal_id}")
+        
+        # Se a tarefa tinha meta e agora não tem mais
+        elif old_goal_id and old_status == 'completed' and old_actual_value:
+            from .models import Goal
+            old_goal = Goal.objects.get(id=old_goal_id)
+            old_goal.current_value -= old_actual_value
+            old_goal.update_progress()
+            print(f"[DEBUG] Removendo meta da tarefa: {old_actual_value} removido da meta {old_goal_id}")
         
         return Response(serializer.data)
     

@@ -6,7 +6,6 @@ import { format, parse } from 'date-fns';
 import { toast } from 'react-toastify';
 import { 
   ArrowLeftIcon,
-  SaveIcon,
   XCircleIcon, 
   ExclamationCircleIcon,
   ClockIcon,
@@ -20,6 +19,8 @@ import {
 import TaskService from '../services/TaskService';
 import CategorySelector from '../components/tasks/CategorySelector';
 import { useTasks } from '../context/TaskContext';
+import TaskOverlapModal, { checkTaskOverlap } from '../components/common/TaskOverlapModal';
+import EditRecurringTaskModal from '../components/common/EditRecurringTaskModal';
 
 const TaskForm = () => {
   const navigate = useNavigate();
@@ -29,6 +30,17 @@ const TaskForm = () => {
   const [loading, setLoading] = useState(isEditing);
   const [goals, setGoals] = useState([]);
   const { categories, fetchCategories } = useTasks();
+  
+  // Estado para o modal de sobreposição
+  const [overlappingTask, setOverlappingTask] = useState(null);
+  const [showOverlapModal, setShowOverlapModal] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState(null);
+  const [dailyTasks, setDailyTasks] = useState([]);
+  
+  // Estado para o modal de edição de tarefa recorrente
+  const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [isRecurringTask, setIsRecurringTask] = useState(false);
+  const [occurrenceDate, setOccurrenceDate] = useState(null);
   
   // Buscar categorias se ainda não foram carregadas
   useEffect(() => {
@@ -57,14 +69,21 @@ const TaskForm = () => {
         try {
           const response = await TaskService.getTask(id);
           
-          // Formatar campos de data e hora para o formulário
-          const taskData = {
-            ...response.data,
-            date: response.data.date,
-            start_time: response.data.start_time,
-            end_time: response.data.end_time,
-          };
+          // Verificar se é uma tarefa recorrente
+          const taskData = response.data;
+          const isRecurring = TaskService.isRecurringTask(taskData);
+          setIsRecurringTask(isRecurring);
           
+          // Obter parâmetros da URL
+          const urlParams = new URLSearchParams(window.location.search);
+          const occurrenceDateParam = urlParams.get('date');
+          if (occurrenceDateParam) {
+            setOccurrenceDate(occurrenceDateParam);
+          } else if (taskData.date) {
+            setOccurrenceDate(taskData.date);
+          }
+          
+          // Formatar campos de data e hora para o formulário
           setTask(taskData);
         } catch (error) {
           console.error('Error fetching task:', error);
@@ -76,6 +95,8 @@ const TaskForm = () => {
       };
       
       fetchTask();
+    } else {
+      setLoading(false);
     }
   }, [id, isEditing, fetchCategories, categories.length, navigate]);
   
@@ -90,6 +111,7 @@ const TaskForm = () => {
         start_time: task.start_time || '08:00',
         end_time: task.end_time || '09:00',
         priority: task.priority || 2,
+        energy_level: task.energy_level || 'medium',
         repeat_pattern: task.repeat_pattern || 'none',
         repeat_days: task.repeat_days || '',
         repeat_end_date: task.repeat_end_date || '',
@@ -108,6 +130,7 @@ const TaskForm = () => {
       start_time: '08:00',
       end_time: '09:00',
       priority: 2,
+      energy_level: 'medium',
       repeat_pattern: 'none',
       repeat_days: '',
       repeat_end_date: '',
@@ -151,43 +174,127 @@ const TaskForm = () => {
     target_value: Yup.number().nullable(),
   });
   
-  // Submeter o formulário
-  const handleSubmit = async (values, { setSubmitting }) => {
+  // Buscar tarefas do dia para verificar sobreposição
+  const fetchDailyTasks = async (date) => {
     try {
-      // Calcular duração em minutos se não fornecida
-      if (!values.duration_minutes) {
-        const startTime = parse(values.start_time, 'HH:mm', new Date());
-        const endTime = parse(values.end_time, 'HH:mm', new Date());
-        
-        // Lidar com tarefas que passam da meia-noite
-        let durationMinutes;
-        if (endTime < startTime) {
-          // Adicionar 24 horas ao endTime
-          const endTimeNextDay = new Date(endTime);
-          endTimeNextDay.setDate(endTimeNextDay.getDate() + 1);
-          
-          durationMinutes = Math.round((endTimeNextDay - startTime) / (1000 * 60));
-        } else {
-          durationMinutes = Math.round((endTime - startTime) / (1000 * 60));
-        }
-        
-        values.duration_minutes = durationMinutes;
+      const formattedDate = typeof date === 'string' ? date : format(date, 'yyyy-MM-dd');
+      const response = await TaskService.getTasksByDate(formattedDate);
+      setDailyTasks(response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching daily tasks:', error);
+      // Não mostrar erro para não interromper o fluxo
+      return [];
+    }
+  };
+  
+  // Efeito para carregar tarefas do dia quando a data muda
+  useEffect(() => {
+    const defaultDate = format(new Date(), 'yyyy-MM-dd');
+    const dateToFetch = task?.date || defaultDate;
+    fetchDailyTasks(dateToFetch);
+  }, [task?.date]);
+  
+  // Verificar sobreposição e mostrar modal se necessário
+  const checkAndSubmit = async (values, formikHelpers) => {
+    // Se estamos editando uma tarefa recorrente e não é uma execução direta
+    if (isEditing && isRecurringTask && !pendingSubmit) {
+      setShowRecurringModal(true);
+      setPendingSubmit({ values, formikHelpers });
+      return;
+    }
+    
+    // Buscar tarefas atualizadas antes de verificar sobreposição
+    const tasks = await fetchDailyTasks(values.date);
+    
+    // Verificar sobreposição
+    const overlap = checkTaskOverlap(tasks, {
+      ...values,
+      id: isEditing ? parseInt(id) : undefined
+    });
+    
+    if (overlap && !pendingSubmit?.ignoreOverlap) {
+      // Guardar dados de submissão para usar depois de confirmar
+      setPendingSubmit({ 
+        values, 
+        formikHelpers,
+        ignoreOverlap: false
+      });
+      setOverlappingTask(overlap);
+      setShowOverlapModal(true);
+    } else {
+      // Sem sobreposição ou usuário escolheu ignorar, continuar normalmente
+      handleSubmit(values, formikHelpers, pendingSubmit?.ignoreOverlap);
+    }
+  };
+  
+  // Confirmar submissão mesmo com sobreposição
+  const confirmOverlapSubmit = () => {
+    if (pendingSubmit) {
+      const { values, formikHelpers } = pendingSubmit;
+      handleSubmit(values, formikHelpers, true);
+    }
+    setShowOverlapModal(false);
+  };
+  
+  // Cancelar submissão com sobreposição
+  const cancelOverlapSubmit = () => {
+    setPendingSubmit(null);
+    setShowOverlapModal(false);
+  };
+  
+  // Confirmação de como editar tarefa recorrente
+  const handleRecurringEditConfirm = (mode) => {
+    if (pendingSubmit) {
+      const { values, formikHelpers } = pendingSubmit;
+      handleRecurringSubmit(values, formikHelpers, mode);
+    }
+    setShowRecurringModal(false);
+  };
+  
+  // Cancelar edição de tarefa recorrente
+  const cancelRecurringEdit = () => {
+    setPendingSubmit(null);
+    setShowRecurringModal(false);
+  };
+  
+  // Submeter tarefa recorrente com modo específico
+  const handleRecurringSubmit = async (values, { setSubmitting }, mode) => {
+    try {
+      // Configurar dados da tarefa
+      const taskData = prepareTaskData(values);
+      
+      // Adicionar o ignore_overlap como query param para evitar verificação duplicada
+      await TaskService.updateRecurringTask(id, taskData, mode, occurrenceDate);
+      
+      toast.success('Tarefa recorrente atualizada com sucesso!');
+      navigate('/day');
+    } catch (error) {
+      console.error('Error updating recurring task:', error);
+      toast.error(
+        error.response?.data?.detail || 
+        'Erro ao atualizar tarefa recorrente. Verifique os dados e tente novamente.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  
+  // Submeter o formulário
+  const handleSubmit = async (values, { setSubmitting }, ignoreOverlap = false) => {
+    try {
+      // Preparar dados da tarefa
+      const taskData = prepareTaskData(values);
+      
+      // Adicionar flag para ignorar sobreposição se necessário
+      if (ignoreOverlap) {
+        taskData.ignore_overlap = true;
       }
       
-      // Converter campos vazios para null
-      const taskData = { ...values };
-      Object.keys(taskData).forEach(key => {
-        if (taskData[key] === '') {
-          taskData[key] = null;
-        }
-      });
-      
       if (isEditing) {
-        await TaskService.updateTask(id, taskData);
-        toast.success('Tarefa atualizada com sucesso!');
+        await TaskService.updateTask(id, taskData, ignoreOverlap);
       } else {
-        await TaskService.createTask(taskData);
-        toast.success('Tarefa criada com sucesso!');
+        await TaskService.createTask(taskData, ignoreOverlap);
       }
       
       // Redirecionar para a visualização diária
@@ -201,6 +308,45 @@ const TaskForm = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+  
+  // Preparar dados da tarefa para envio
+  const prepareTaskData = (values) => {
+    // Calcular duração em minutos se não fornecida
+    let taskData = { ...values };
+    
+    if (!taskData.duration_minutes) {
+      try {
+        const startTime = parse(taskData.start_time, 'HH:mm', new Date());
+        const endTime = parse(taskData.end_time, 'HH:mm', new Date());
+        
+        // Lidar com tarefas que passam da meia-noite
+        let durationMinutes;
+        if (endTime < startTime) {
+          // Adicionar 24 horas ao endTime
+          const endTimeNextDay = new Date(endTime);
+          endTimeNextDay.setDate(endTimeNextDay.getDate() + 1);
+          
+          durationMinutes = Math.round((endTimeNextDay - startTime) / (1000 * 60));
+        } else {
+          durationMinutes = Math.round((endTime - startTime) / (1000 * 60));
+        }
+        
+        taskData.duration_minutes = durationMinutes;
+      } catch (error) {
+        console.error('Error calculating duration:', error);
+        // Se falhar o cálculo, enviar sem duração
+      }
+    }
+    
+    // Converter campos vazios para null
+    Object.keys(taskData).forEach(key => {
+      if (taskData[key] === '') {
+        taskData[key] = null;
+      }
+    });
+    
+    return taskData;
   };
   
   // Condicional para mostrar campos específicos
@@ -241,7 +387,7 @@ const TaskForm = () => {
       <Formik
         initialValues={getInitialValues()}
         validationSchema={validationSchema}
-        onSubmit={handleSubmit}
+        onSubmit={checkAndSubmit}
         enableReinitialize
       >
         {({ values, isSubmitting, setFieldValue }) => (
@@ -293,6 +439,10 @@ const TaskForm = () => {
                   name="date"
                   type="date"
                   className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
+                  onChange={(e) => {
+                    setFieldValue('date', e.target.value);
+                    fetchDailyTasks(e.target.value);
+                  }}
                 />
                 <ErrorMessage name="date" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>
@@ -490,6 +640,24 @@ const TaskForm = () => {
           </Form>
         )}
       </Formik>
+      
+      {/* Modal de sobreposição de horário */}
+      <TaskOverlapModal
+        isOpen={showOverlapModal}
+        onClose={cancelOverlapSubmit}
+        onConfirm={confirmOverlapSubmit}
+        overlappingTask={overlappingTask}
+      />
+      
+      {/* Modal de edição de tarefas recorrentes */}
+      {isRecurringTask && (
+        <EditRecurringTaskModal
+          isOpen={showRecurringModal}
+          onClose={cancelRecurringEdit}
+          onConfirm={handleRecurringEditConfirm}
+          taskTitle={task?.title || ''}
+        />
+      )}
     </div>
   );
 };
