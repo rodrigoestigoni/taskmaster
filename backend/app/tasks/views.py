@@ -288,18 +288,22 @@ class TaskViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
     
     def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
+        from django.db import transaction
         
-        # Verificar se a tarefa está concluída e tem meta associada
-        if instance.status == 'completed' and instance.goal and instance.actual_value:
-            # Subtrair o valor da meta
-            goal = instance.goal
-            goal.current_value -= instance.actual_value
-            goal.update_progress()
-            print(f"[DEBUG] Ajustando meta ao excluir tarefa: Subtraindo {instance.actual_value} da meta {goal.id}")
+        with transaction.atomic():
+            instance = self.get_object()
+            
+            # Verificar se a tarefa está concluída e tem meta associada
+            if instance.status == 'completed' and instance.goal and instance.actual_value:
+                # Subtrair o valor da meta
+                goal = instance.goal
+                goal.current_value = max(0, goal.current_value - instance.actual_value)
+                goal.update_progress()
+                print(f"[DEBUG] Ajustando meta ao excluir tarefa: Subtraindo {instance.actual_value} da meta {goal.id}")
+            
+            # Excluir a tarefa
+            self.perform_destroy(instance)
         
-        # Excluir a tarefa
-        self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
     
     @action(detail=False, methods=['get'])
@@ -913,195 +917,270 @@ class TaskViewSet(viewsets.ModelViewSet):
         - 'this_and_future': esta ocorrência e todas futuras
         - 'all': todas as ocorrências (tarefa inteira)
         """
-        task = self.get_object()
-        delete_mode = request.query_params.get('mode', 'only_this')
-        date_str = request.query_params.get('date')
+        from django.db import transaction
         
-        if not date_str and delete_mode != 'all':
-            return Response(
-                {'error': 'Data é obrigatória para excluir ocorrências específicas'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if delete_mode != 'all':
-            try:
-                date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            except ValueError:
+        with transaction.atomic():
+            task = self.get_object()
+            delete_mode = request.query_params.get('mode', 'only_this')
+            date_str = request.query_params.get('date')
+            
+            if not date_str and delete_mode != 'all':
                 return Response(
-                    {'error': 'Formato de data inválido. Use YYYY-MM-DD'},
+                    {'error': 'Data é obrigatória para excluir ocorrências específicas'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-        
-        if delete_mode == 'only_this':
-            try:
-                occurrence = TaskOccurrence.objects.get(task=task, date=date)
-                
-                # Se a ocorrência está concluída e tem meta, ajustar a meta
-                if occurrence.status == 'completed' and task.goal and occurrence.actual_value:
-                    goal = task.goal
-                    goal.current_value -= occurrence.actual_value
-                    goal.update_progress()
-                    print(f"[DEBUG] Ajustando meta ao excluir ocorrência: {occurrence.actual_value} removido")
-                
-                occurrence.delete()
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            except TaskOccurrence.DoesNotExist:
-                # Se não existir uma ocorrência, criar uma com status 'skipped'
-                TaskOccurrence.objects.create(
-                    task=task,
-                    date=date,
-                    status='skipped',
-                    notes="Excluída pelo usuário"
-                )
-                return Response(status=status.HTTP_204_NO_CONTENT)
-        
-        # Caso 2: Excluir esta ocorrência e todas as futuras
-        elif delete_mode == 'this_and_future':
-            # Atualizar a data final de recorrência para o dia anterior
-            if date <= task.date:
-                # Se a data for a data inicial ou anterior, excluir a tarefa inteira
-                task.delete()
-            else:
-                # Caso contrário, atualizar a data final
-                task.repeat_end_date = date - timedelta(days=1)
-                task.save()
-                
-                # Excluir ocorrências desta data em diante
-                TaskOccurrence.objects.filter(task=task, date__gte=date).delete()
             
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        
-        # Caso 3: Excluir todas as ocorrências (tarefa inteira)
-        elif delete_mode == 'all':
-            task.delete()  # Isso já exclui todas as ocorrências devido a DELETE CASCADE
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        
-        return Response(
-            {'error': 'Modo de exclusão inválido'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+            if delete_mode != 'all':
+                try:
+                    date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    return Response(
+                        {'error': 'Formato de data inválido. Use YYYY-MM-DD'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            if delete_mode == 'only_this':
+                try:
+                    occurrence = TaskOccurrence.objects.get(task=task, date=date)
+                    
+                    # Se a ocorrência está concluída e tem meta, ajustar a meta
+                    if occurrence.status == 'completed' and task.goal and occurrence.actual_value:
+                        goal = task.goal
+                        goal.current_value = max(0, goal.current_value - occurrence.actual_value)
+                        goal.update_progress()
+                        print(f"[DEBUG] Ajustando meta ao excluir ocorrência: {occurrence.actual_value} removido")
+                    
+                    occurrence.delete()
+                    return Response(status=status.HTTP_204_NO_CONTENT)
+                except TaskOccurrence.DoesNotExist:
+                    # Se não existir uma ocorrência, criar uma com status 'skipped'
+                    TaskOccurrence.objects.create(
+                        task=task,
+                        date=date,
+                        status='skipped',
+                        notes="Excluída pelo usuário"
+                    )
+                    return Response(status=status.HTTP_204_NO_CONTENT)
+            
+            # Caso 2: Excluir esta ocorrência e todas as futuras
+            elif delete_mode == 'this_and_future':
+                # Atualizar a data final de recorrência para o dia anterior
+                if date <= task.date:
+                    # Antes de excluir a tarefa, ajustar todas as metas afetadas
+                    if task.goal:
+                        # Buscar todas as ocorrências concluídas para esta tarefa
+                        completed_occurrences = TaskOccurrence.objects.filter(
+                            task=task,
+                            status='completed'
+                        )
+                        
+                        total_to_remove = sum(occ.actual_value or 0 for occ in completed_occurrences)
+                        
+                        if total_to_remove > 0:
+                            goal = task.goal
+                            goal.current_value = max(0, goal.current_value - total_to_remove)
+                            goal.update_progress()
+                            print(f"[DEBUG] Removendo {total_to_remove} da meta {goal.id} ao excluir tarefa recorrente")
+                    
+                    # Se a data for a data inicial ou anterior, excluir a tarefa inteira
+                    task.delete()
+                else:
+                    # Caso contrário, atualizar a data final
+                    task.repeat_end_date = date - timedelta(days=1)
+                    task.save()
+                    
+                    # Excluir ocorrências desta data em diante, ajustando metas conforme necessário
+                    if task.goal:
+                        future_completed = TaskOccurrence.objects.filter(
+                            task=task,
+                            date__gte=date,
+                            status='completed'
+                        )
+                        
+                        total_to_remove = sum(occ.actual_value or 0 for occ in future_completed)
+                        
+                        if total_to_remove > 0:
+                            goal = task.goal
+                            goal.current_value = max(0, goal.current_value - total_to_remove)
+                            goal.update_progress()
+                            print(f"[DEBUG] Removendo {total_to_remove} da meta {goal.id} ao excluir ocorrências futuras")
+                    
+                    TaskOccurrence.objects.filter(task=task, date__gte=date).delete()
+                
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            
+            # Caso 3: Excluir todas as ocorrências (tarefa inteira)
+            elif delete_mode == 'all':
+                if task.goal:
+                    # Buscar todas as ocorrências concluídas para esta tarefa
+                    completed_occurrences = TaskOccurrence.objects.filter(
+                        task=task,
+                        status='completed'
+                    )
+                    
+                    total_to_remove = sum(occ.actual_value or 0 for occ in completed_occurrences)
+                    
+                    # Se a tarefa principal também tem valor (sem ocorrências)
+                    if task.status == 'completed' and task.actual_value:
+                        total_to_remove += task.actual_value
+                    
+                    if total_to_remove > 0:
+                        goal = task.goal
+                        goal.current_value = max(0, goal.current_value - total_to_remove)
+                        goal.update_progress()
+                        print(f"[DEBUG] Removendo {total_to_remove} da meta {goal.id} ao excluir todas as ocorrências")
+                
+                task.delete()  # Isso já exclui todas as ocorrências devido a DELETE CASCADE
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            
+            return Response(
+                {'error': 'Modo de exclusão inválido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         """Atualizar status da tarefa"""
-        task = self.get_object()
-        status_value = request.data.get('status')
-        notes = request.data.get('notes')
-        actual_value = request.data.get('actual_value')
+        from django.db import transaction
         
-        print(f"[DEBUG] Atualizando status da tarefa {task.id} para {status_value}")
-        print(f"[DEBUG] Valor recebido: {actual_value}, Tipo: {type(actual_value)}")
-        print(f"[DEBUG] Meta associada: {task.goal.id if task.goal else 'Nenhuma'}")
-        
-        if status_value not in dict(Task.STATUS_CHOICES):
-            return Response({'error': 'Status inválido'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Verificar se está marcando como concluída
-        is_completing = status_value == 'completed'
-        
-        # Para tarefas recorrentes, criar uma ocorrência
-        if task.repeat_pattern != 'none':
-            occurrence_date = request.data.get('date', timezone.localdate())
+        with transaction.atomic():
+            task = self.get_object()
+            status_value = request.data.get('status')
+            notes = request.data.get('notes')
+            actual_value = request.data.get('actual_value')
             
-            # Verificar o formato da data
-            if isinstance(occurrence_date, str):
-                try:
-                    occurrence_date = datetime.strptime(occurrence_date, '%Y-%m-%d').date()
-                except ValueError:
-                    return Response({'error': 'Formato de data inválido'}, status=status.HTTP_400_BAD_REQUEST)
+            print(f"[DEBUG] Atualizando status da tarefa {task.id} para {status_value}")
+            print(f"[DEBUG] Valor recebido: {actual_value}, Tipo: {type(actual_value)}")
+            print(f"[DEBUG] Meta associada: {task.goal.id if task.goal else 'Nenhuma'}")
             
-            # Verificar se já existe uma ocorrência com status completed
-            previous_occurrence = None
-            try:
-                previous_occurrence = TaskOccurrence.objects.get(task=task, date=occurrence_date)
-                was_already_completed = previous_occurrence.status == 'completed'
-            except TaskOccurrence.DoesNotExist:
-                was_already_completed = False
+            if status_value not in dict(Task.STATUS_CHOICES):
+                return Response({'error': 'Status inválido'}, status=status.HTTP_400_BAD_REQUEST)
             
-            # Criar ou atualizar a ocorrência
-            occurrence, created = TaskOccurrence.objects.get_or_create(
-                task=task,
-                date=occurrence_date,
-                defaults={
-                    'status': status_value,
-                    'actual_value': actual_value,
-                    'notes': notes
-                }
-            )
+            # Verificar se está marcando como concluída
+            is_completing = status_value == 'completed'
             
-            if not created:
-                # Se a ocorrência já existia, atualizar seus campos
-                old_status = occurrence.status
-                occurrence.status = status_value
-                if actual_value is not None:
-                    occurrence.actual_value = actual_value
-                if notes:
-                    occurrence.notes = notes
-                occurrence.save()
-            
-            # Atualizar meta associada apenas se:
-            # 1. Existe uma meta
-            # 2. Estamos marcando como concluída agora (não estava concluída antes)
-            # 3. Temos um valor real para contribuir
-            if (is_completing and not was_already_completed and 
-                task.goal and actual_value is not None):
-                
-                # Converter para float se for string
-                if isinstance(actual_value, str):
-                    try:
-                        actual_value = float(actual_value)
-                    except ValueError:
-                        return Response({'error': 'Valor inválido'}, status=status.HTTP_400_BAD_REQUEST)
-                
-                goal = task.goal
-                print(f"[DEBUG] Atualizando meta {goal.id}. Valor atual: {goal.current_value}")
-                print(f"[DEBUG] Adicionando valor: {actual_value}")
-                
-                goal.current_value += actual_value
-                goal.update_progress()
-                
-                print(f"[DEBUG] Meta atualizada. Novo valor: {goal.current_value}")
-            
-            serializer = TaskOccurrenceSerializer(occurrence)
-            return Response(serializer.data)
-        else:
-            # Para tarefas não recorrentes
+            # Guardar valores antigos para comparação
             old_status = task.status
+            old_actual_value = task.actual_value or 0
             was_already_completed = old_status == 'completed'
             
-            # Atualizar a tarefa
-            task.status = status_value
-            if actual_value is not None:
-                task.actual_value = actual_value
-            if notes:
-                task.notes = notes
-            task.save()
-            
-            # Atualizar meta associada apenas se:
-            # 1. Existe uma meta
-            # 2. Estamos marcando como concluída agora (não estava concluída antes)
-            # 3. Temos um valor real para contribuir
-            if (is_completing and not was_already_completed and 
-                task.goal and actual_value is not None):
+            # Para tarefas recorrentes, criar uma ocorrência
+            if task.repeat_pattern != 'none':
+                occurrence_date = request.data.get('date', timezone.localdate())
                 
-                # Converter para float se for string
-                if isinstance(actual_value, str):
-                    try:
-                        actual_value = float(actual_value)
-                    except ValueError:
-                        return Response({'error': 'Valor inválido'}, status=status.HTTP_400_BAD_REQUEST)
+                occurrence, created = TaskOccurrence.objects.get_or_create(
+                    task=task,
+                    date=occurrence_date,
+                    defaults={
+                        'status': status_value,
+                        'actual_value': actual_value,
+                        'notes': notes
+                    }
+                )
                 
-                goal = task.goal
-                print(f"[DEBUG] Atualizando meta {goal.id}. Valor atual: {goal.current_value}")
-                print(f"[DEBUG] Adicionando valor: {actual_value}")
+                if not created:
+                    # Guardar valores antigos para comparação
+                    old_occurrence_status = occurrence.status
+                    old_occurrence_value = occurrence.actual_value or 0
+                    was_already_completed = old_occurrence_status == 'completed'
+                    
+                    # Atualizar a ocorrência
+                    occurrence.status = status_value
+                    occurrence.actual_value = actual_value
+                    occurrence.notes = notes
+                    
+                    # Atualizar meta associada
+                    if task.goal:
+                        # Caso 1: Estava concluída e continua, mas valor mudou
+                        if was_already_completed and is_completing and old_occurrence_value != (actual_value or 0):
+                            diff = (actual_value or 0) - old_occurrence_value
+                            if diff != 0:
+                                task.goal.current_value += diff
+                                task.goal.update_progress()
+                                print(f"[DEBUG] Ajustando meta (ocorrência): {diff} na meta {task.goal.id}")
+                        
+                        # Caso 2: Estava concluída mas não está mais
+                        elif was_already_completed and not is_completing:
+                            task.goal.current_value = max(0, task.goal.current_value - old_occurrence_value)
+                            task.goal.update_progress()
+                            print(f"[DEBUG] Removendo valor da meta (ocorrência): {old_occurrence_value} da meta {task.goal.id}")
+                        
+                        # Caso 3: Não estava concluída mas agora está
+                        elif not was_already_completed and is_completing and actual_value is not None:
+                            # Converter para float se for string
+                            actual_value_float = actual_value
+                            if isinstance(actual_value, str):
+                                try:
+                                    actual_value_float = float(actual_value)
+                                except ValueError:
+                                    return Response({'error': 'Valor inválido'}, status=status.HTTP_400_BAD_REQUEST)
+                            
+                            task.goal.current_value += actual_value_float
+                            task.goal.update_progress()
+                            print(f"[DEBUG] Adicionando valor à meta (ocorrência): {actual_value_float} à meta {task.goal.id}")
+                    
+                    occurrence.save()
+                else:
+                    # Nova ocorrência, se está marcada como concluída
+                    if is_completing and task.goal and actual_value is not None:
+                        # Converter para float se for string
+                        actual_value_float = actual_value
+                        if isinstance(actual_value, str):
+                            try:
+                                actual_value_float = float(actual_value)
+                            except ValueError:
+                                return Response({'error': 'Valor inválido'}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        task.goal.current_value += actual_value_float
+                        task.goal.update_progress()
+                        print(f"[DEBUG] Nova ocorrência concluída: {actual_value_float} adicionado à meta {task.goal.id}")
                 
-                goal.current_value += actual_value
-                goal.update_progress()
+                serializer = TaskOccurrenceSerializer(occurrence)
+                return Response(serializer.data)
+            else:
+                # Para tarefas não recorrentes
                 
-                print(f"[DEBUG] Meta atualizada. Novo valor: {goal.current_value}")
-            
-            serializer = self.get_serializer(task)
-            return Response(serializer.data)
+                # Atualizar a tarefa
+                task.status = status_value
+                if actual_value is not None:
+                    task.actual_value = actual_value
+                if notes:
+                    task.notes = notes
+                
+                # Atualizar meta associada
+                if task.goal:
+                    # Caso 1: Estava concluída e continua, mas valor mudou
+                    if was_already_completed and is_completing and old_actual_value != (actual_value or 0):
+                        diff = (actual_value or 0) - old_actual_value
+                        if diff != 0:
+                            task.goal.current_value += diff
+                            task.goal.update_progress()
+                            print(f"[DEBUG] Ajustando meta: {diff} adicionado à meta {task.goal.id}")
+                    
+                    # Caso 2: Estava concluída mas não está mais
+                    elif was_already_completed and not is_completing:
+                        task.goal.current_value = max(0, task.goal.current_value - old_actual_value)
+                        task.goal.update_progress()
+                        print(f"[DEBUG] Removendo valor da meta: {old_actual_value} removido da meta {task.goal.id}")
+                    
+                    # Caso 3: Não estava concluída mas agora está
+                    elif not was_already_completed and is_completing and actual_value is not None:
+                        # Converter para float se for string
+                        actual_value_float = actual_value
+                        if isinstance(actual_value, str):
+                            try:
+                                actual_value_float = float(actual_value)
+                            except ValueError:
+                                return Response({'error': 'Valor inválido'}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        task.goal.current_value += actual_value_float
+                        task.goal.update_progress()
+                        print(f"[DEBUG] Adicionando valor à meta: {actual_value_float} adicionado à meta {task.goal.id}")
+                
+                task.save()
+                
+                serializer = self.get_serializer(task)
+                return Response(serializer.data)
             
     @action(detail=False, methods=['get'])
     def energy_recommendations(self, request):
@@ -1158,55 +1237,72 @@ class TaskViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def update(self, request, *args, **kwargs):
-        instance = self.get_object()
+        from django.db import transaction
         
-        # Salvar valores antigos
-        old_status = instance.status
-        old_actual_value = instance.actual_value or 0
-        old_goal_id = instance.goal.id if instance.goal else None
-        
-        # Atualizar a tarefa
-        serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        
-        # Verificar se houve alteração relevante para a meta
-        if instance.goal:
-            # Caso 1: Mesma meta, verifica mudanças de valor ou status
-            if old_goal_id == instance.goal.id:
-                if old_status == 'completed' and instance.status == 'completed' and instance.actual_value != old_actual_value:
-                    # Ajustar a diferença
-                    diff = (instance.actual_value or 0) - old_actual_value
-                    if diff != 0:
+        with transaction.atomic():
+            instance = self.get_object()
+            
+            # Salvar valores antigos
+            old_status = instance.status
+            old_actual_value = instance.actual_value or 0
+            old_goal_id = instance.goal.id if instance.goal else None
+            
+            # Atualizar a tarefa
+            serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            
+            # A partir daqui, instance já está atualizado com os novos valores
+            
+            # Verificar se houve alteração relevante para a meta
+            if instance.goal:
+                # Caso 1: Mesma meta, verifica mudanças de valor ou status
+                if old_goal_id == instance.goal.id:
+                    if old_status == 'completed' and instance.status == 'completed' and instance.actual_value != old_actual_value:
+                        # Ajustar a diferença
+                        diff = (instance.actual_value or 0) - old_actual_value
+                        if diff != 0:
+                            goal = instance.goal
+                            goal.current_value += diff
+                            goal.update_progress()
+                            print(f"[DEBUG] Ajustando meta: {diff} adicionado à meta {goal.id}. Valor atual: {goal.current_value}")
+                    elif old_status == 'completed' and instance.status != 'completed':
+                        # Tarefa não está mais concluída, remover valor
                         goal = instance.goal
-                        goal.current_value += diff
+                        goal.current_value = max(0, goal.current_value - old_actual_value)
                         goal.update_progress()
-                        print(f"[DEBUG] Ajustando meta: {diff} adicionado à meta {goal.id}. Valor atual: {goal.current_value}")
-                elif old_status == 'completed' and instance.status != 'completed':
-                    # Tarefa não está mais concluída, remover valor
-                    goal = instance.goal
-                    goal.current_value -= old_actual_value
-                    goal.update_progress()
-                    print(f"[DEBUG] Removendo valor da meta: {old_actual_value} removido da meta {goal.id}")
-            # Caso 2: Mudou de meta
-            elif old_goal_id:
+                        print(f"[DEBUG] Removendo valor da meta: {old_actual_value} removido da meta {goal.id}")
+                    elif old_status != 'completed' and instance.status == 'completed' and instance.actual_value:
+                        # Tarefa agora está concluída, adicionar valor
+                        goal = instance.goal
+                        goal.current_value += instance.actual_value
+                        goal.update_progress()
+                        print(f"[DEBUG] Adicionando valor à meta: {instance.actual_value} adicionado à meta {goal.id}")
+                # Caso 2: Mudou de meta
+                elif old_goal_id:
+                    from .models import Goal
+                    old_goal = Goal.objects.get(id=old_goal_id)
+                    # Remover da meta antiga se estava concluída
+                    if old_status == 'completed' and old_actual_value:
+                        old_goal.current_value = max(0, old_goal.current_value - old_actual_value)
+                        old_goal.update_progress()
+                        print(f"[DEBUG] Removendo da meta antiga: {old_actual_value} removido da meta {old_goal_id}")
+                    
+                    # Adicionar à nova meta se está concluída
+                    if instance.status == 'completed' and instance.actual_value:
+                        instance.goal.current_value += instance.actual_value
+                        instance.goal.update_progress()
+                        print(f"[DEBUG] Adicionando à nova meta: {instance.actual_value} adicionado à meta {instance.goal.id}")
+            
+            # Se a tarefa tinha meta e agora não tem mais
+            elif old_goal_id and old_status == 'completed' and old_actual_value:
                 from .models import Goal
                 old_goal = Goal.objects.get(id=old_goal_id)
-                # Remover da meta antiga se estava concluída
-                if old_status == 'completed' and old_actual_value:
-                    old_goal.current_value -= old_actual_value
-                    old_goal.update_progress()
-                    print(f"[DEBUG] Removendo da meta antiga: {old_actual_value} removido da meta {old_goal_id}")
-        
-        # Se a tarefa tinha meta e agora não tem mais
-        elif old_goal_id and old_status == 'completed' and old_actual_value:
-            from .models import Goal
-            old_goal = Goal.objects.get(id=old_goal_id)
-            old_goal.current_value -= old_actual_value
-            old_goal.update_progress()
-            print(f"[DEBUG] Removendo meta da tarefa: {old_actual_value} removido da meta {old_goal_id}")
-        
-        return Response(serializer.data)
+                old_goal.current_value = max(0, old_goal.current_value - old_actual_value)
+                old_goal.update_progress()
+                print(f"[DEBUG] Removendo meta da tarefa: {old_actual_value} removido da meta {old_goal_id}")
+            
+            return Response(serializer.data)
     
     @action(detail=True, methods=['put'])
     def edit_recurring(self, request, pk=None):
