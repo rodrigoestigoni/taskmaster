@@ -144,87 +144,90 @@ class Task(models.Model):
         return self.title
     
     def save(self, *args, **kwargs):
-        # Verificar se é uma tarefa existente sendo atualizada
-        if self.pk:
-            # Buscar a versão antiga da tarefa para comparação
+        # Check if this is an existing task being updated
+        is_new = self.pk is None
+        
+        # If updating an existing task
+        if not is_new:
             try:
+                # Get the previous version of the task for comparison
                 old_task = Task.objects.get(pk=self.pk)
                 old_status = old_task.status
-                old_value = old_task.actual_value or 0
+                old_actual_value = old_task.actual_value or 0
                 old_goal = old_task.goal
                 
-                # Calcular duração automaticamente se não fornecida
+                # Calculate duration automatically if not provided
                 if not self.duration_minutes and self.start_time and self.end_time:
-                    # Converter para minutos
+                    # Convert to minutes
                     start_minutes = self.start_time.hour * 60 + self.start_time.minute
                     end_minutes = self.end_time.hour * 60 + self.end_time.minute
                     
-                    # Lidar com tarefas que passam da meia-noite
+                    # Handle tasks that go past midnight
                     if end_minutes < start_minutes:
                         end_minutes += 24 * 60
                         
                     self.duration_minutes = end_minutes - start_minutes
                 
-                # Salvar a tarefa
+                # Save the task first
                 super().save(*args, **kwargs)
                 
-                # Verificar mudanças relacionadas à meta
+                # Handle goal progress updates
                 if self.goal:
-                    # Se a meta é a mesma de antes
+                    # If the goal is the same as before
                     if old_goal and old_goal.id == self.goal.id:
-                        # Se estava concluída antes e ainda está, mas o valor mudou
-                        if old_status == 'completed' and self.status == 'completed' and old_value != (self.actual_value or 0):
-                            # Ajustar a diferença
-                            diff = (self.actual_value or 0) - old_value
+                        # Case 1: Was completed before and still is, but value changed
+                        if old_status == 'completed' and self.status == 'completed' and old_actual_value != (self.actual_value or 0):
+                            # Calculate the difference and adjust goal value
+                            diff = (self.actual_value or 0) - old_actual_value
                             if diff != 0:
                                 self.goal.current_value += diff
                                 self.goal.update_progress()
-                                print(f"[TASK MODEL] Ajustando meta: {diff} adicionado à meta {self.goal.id}")
+                                print(f"[TASK MODEL] Adjusted goal: {diff} added to goal {self.goal.id}")
                         
-                        # Se estava concluída mas não está mais
+                        # Case 2: Was completed but no longer is
                         elif old_status == 'completed' and self.status != 'completed':
-                            # Remover valor
-                            self.goal.current_value -= old_value
+                            # Remove the value
+                            self.goal.current_value = max(0, self.goal.current_value - old_actual_value)
                             self.goal.update_progress()
-                            print(f"[TASK MODEL] Removendo valor da meta: {old_value} removido da meta {self.goal.id}")
+                            print(f"[TASK MODEL] Removed value from goal: {old_actual_value} removed from goal {self.goal.id}")
                         
-                        # Se não estava concluída mas agora está
+                        # Case 3: Wasn't completed but now is
                         elif old_status != 'completed' and self.status == 'completed' and self.actual_value:
-                            # Adicionar valor
+                            # Add the value
                             self.goal.current_value += self.actual_value
                             self.goal.update_progress()
-                            print(f"[TASK MODEL] Adicionando valor à meta: {self.actual_value} adicionado à meta {self.goal.id}")
+                            print(f"[TASK MODEL] Added value to goal: {self.actual_value} added to goal {self.goal.id}")
                     
-                    # Se a meta mudou
+                    # If the goal changed
                     elif old_goal and old_goal.id != self.goal.id:
-                        # Se estava concluída, remover valor da meta antiga
-                        if old_status == 'completed' and old_value:
-                            old_goal.current_value -= old_value
+                        # Remove value from old goal if task was completed
+                        if old_status == 'completed' and old_actual_value:
+                            old_goal.current_value = max(0, old_goal.current_value - old_actual_value)
                             old_goal.update_progress()
-                            print(f"[TASK MODEL] Removendo da meta antiga: {old_value} removido da meta {old_goal.id}")
+                            print(f"[TASK MODEL] Removed from old goal: {old_actual_value} removed from goal {old_goal.id}")
                         
-                        # Se está concluída, adicionar valor à nova meta
+                        # Add value to new goal if task is completed
                         if self.status == 'completed' and self.actual_value:
                             self.goal.current_value += self.actual_value
                             self.goal.update_progress()
-                            print(f"[TASK MODEL] Adicionando à nova meta: {self.actual_value} adicionado à meta {self.goal.id}")
+                            print(f"[TASK MODEL] Added to new goal: {self.actual_value} added to goal {self.goal.id}")
                     
-                    # Se não tinha meta antes mas tem agora
+                    # If there was no goal before but there is now
                     elif not old_goal and self.status == 'completed' and self.actual_value:
-                        # Adicionar valor à nova meta
+                        # Add value to the new goal
                         self.goal.current_value += self.actual_value
                         self.goal.update_progress()
-                        print(f"[TASK MODEL] Adicionando à meta nova: {self.actual_value} adicionado à meta {self.goal.id}")
+                        print(f"[TASK MODEL] Added to new goal: {self.actual_value} added to goal {self.goal.id}")
                 
-                # Se tinha meta antes mas não tem mais
-                elif old_goal and old_status == 'completed' and old_value:
-                    # Remover valor da meta antiga
-                    old_goal.current_value -= old_value
+                # If had goal before but no longer has
+                elif old_goal and old_status == 'completed' and old_actual_value:
+                    # Remove value from the old goal
+                    old_goal.current_value = max(0, old_goal.current_value - old_actual_value)
                     old_goal.update_progress()
-                    print(f"[TASK MODEL] Removendo meta da tarefa: {old_value} removido da meta {old_goal.id}")
-                
+                    print(f"[TASK MODEL] Removed goal from task: {old_actual_value} removed from goal {old_goal.id}")
+                    
             except Task.DoesNotExist:
-                # Tarefa nova - calcular duração e salvar
+                # First save for new tasks - calculate duration and save
                 if not self.duration_minutes and self.start_time and self.end_time:
                     start_minutes = self.start_time.hour * 60 + self.start_time.minute
                     end_minutes = self.end_time.hour * 60 + self.end_time.minute
@@ -236,13 +239,13 @@ class Task(models.Model):
                 
                 super().save(*args, **kwargs)
                 
-                # Para tarefa nova que já está concluída
+                # For new tasks that are already completed
                 if self.status == 'completed' and self.goal and self.actual_value:
                     self.goal.current_value += self.actual_value
                     self.goal.update_progress()
-                    print(f"[TASK MODEL] Nova tarefa já concluída: {self.actual_value} adicionado à meta {self.goal.id}")
+                    print(f"[TASK MODEL] New task already completed: {self.actual_value} added to goal {self.goal.id}")
         else:
-            # Tarefa nova - calcular duração e salvar
+            # New task - calculate duration and save
             if not self.duration_minutes and self.start_time and self.end_time:
                 start_minutes = self.start_time.hour * 60 + self.start_time.minute
                 end_minutes = self.end_time.hour * 60 + self.end_time.minute
@@ -254,11 +257,11 @@ class Task(models.Model):
             
             super().save(*args, **kwargs)
             
-            # Para tarefa nova que já está concluída
+            # For new tasks that are already completed
             if self.status == 'completed' and self.goal and self.actual_value:
                 self.goal.current_value += self.actual_value
                 self.goal.update_progress()
-                print(f"[TASK MODEL] Nova tarefa já concluída: {self.actual_value} adicionado à meta {self.goal.id}")
+                print(f"[TASK MODEL] New task already completed: {self.actual_value} added to goal {self.goal.id}")
 
 class EnergyProfile(models.Model):
     """Perfil de energia do usuário ao longo do dia"""

@@ -293,15 +293,15 @@ class TaskViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             instance = self.get_object()
             
-            # Verificar se a tarefa está concluída e tem meta associada
+            # Check if the task is completed and has an associated goal
             if instance.status == 'completed' and instance.goal and instance.actual_value:
-                # Subtrair o valor da meta
+                # Subtract the value from the goal
                 goal = instance.goal
                 goal.current_value = max(0, goal.current_value - instance.actual_value)
                 goal.update_progress()
-                print(f"[DEBUG] Ajustando meta ao excluir tarefa: Subtraindo {instance.actual_value} da meta {goal.id}")
+                print(f"[TaskViewSet] Adjusting goal when deleting task: Subtracting {instance.actual_value} from goal {goal.id}")
             
-            # Excluir a tarefa
+            # Delete the task
             self.perform_destroy(instance)
         
         return Response(status=status.HTTP_204_NO_CONTENT)

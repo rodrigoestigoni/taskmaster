@@ -23,6 +23,7 @@ import GoalForm from './pages/GoalForm';
 import Goals from './pages/Goals';
 import Settings from './pages/Settings';
 import Reports from './pages/Reports';
+import EnhancedTaskDetail from './pages/EnhancedTaskDetail';
 import OnboardingTutorial from './components/common/OnboardingTutorial';
 import EnergyProfilePage from './pages/EnergyProfilePage';
 
@@ -58,6 +59,7 @@ function App() {
                     <Route path="/month" element={<MonthView />} />
                     <Route path="/task/new" element={<TaskForm />} />
                     <Route path="/task/edit/:id" element={<TaskForm />} />
+                    <Route path="/enhanced_task" element={<EnhancedTaskDetail />} />
                     <Route path="/energy" element={<EnergyProfilePage />} />
                     <Route path="/goals" element={<Goals />} />
                     <Route path="/goal/new" element={<GoalForm />} />
