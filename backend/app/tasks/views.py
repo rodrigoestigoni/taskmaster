@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 from django.db.models import Q, Sum, Count, Case, When, IntegerField, F
 from django.utils import timezone
 
+from .utils import check_task_overlap
 from .services import EnergyMatchService
 from .models import Task, Category, Goal, TaskOccurrence, UserPreference
 from .serializers import (
@@ -107,6 +108,166 @@ class GoalViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.data)
 
+def update_recurring_task(self, instance, request, mode, occurrence_date=None):
+    """
+    Atualiza uma tarefa recorrente com base no modo selecionado:
+    - 'only_this': Apenas a ocorrência específica
+    - 'this_and_future': Esta ocorrência e todas as futuras
+    - 'all': Todas as ocorrências
+    
+    Args:
+        instance: Instância da tarefa
+        request: Request do Django
+        mode: Modo de edição ('only_this', 'this_and_future', 'all')
+        occurrence_date: Data da ocorrência específica (formato YYYY-MM-DD)
+    
+    Returns:
+        Response com os dados atualizados
+    """
+    from django.db import transaction
+    
+    if mode not in ['only_this', 'this_and_future', 'all']:
+        return Response(
+            {'error': 'Modo de edição inválido. Use "only_this", "this_and_future" ou "all".'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Para o modo 'only_this', a data da ocorrência é obrigatória
+    if mode == 'only_this' and not occurrence_date:
+        return Response(
+            {'error': 'Data da ocorrência é obrigatória para o modo "only_this".'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Para o modo 'this_and_future', a data da ocorrência é obrigatória
+    if mode == 'this_and_future' and not occurrence_date:
+        return Response(
+            {'error': 'Data da ocorrência é obrigatória para o modo "this_and_future".'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Verificar sobreposição (apenas para 'all' e 'this_and_future')
+    if mode in ['all', 'this_and_future']:
+        date = request.data.get('date', instance.date)
+        start_time = request.data.get('start_time', instance.start_time)
+        end_time = request.data.get('end_time', instance.end_time)
+        
+        ignore_overlap = request.query_params.get('ignore_overlap', 'false').lower() == 'true'
+        
+        if not ignore_overlap and date and start_time and end_time:
+            overlapping_task = check_task_overlap(
+                user=request.user,
+                date=date,
+                start_time=start_time,
+                end_time=end_time,
+                exclude_task_id=instance.id  # Excluir a própria tarefa da verificação
+            )
+            
+            if overlapping_task:
+                # Retornar erro com detalhes da sobreposição
+                return Response({
+                    'error': 'Sobreposição de horário detectada',
+                    'overlapping_task': {
+                        'id': overlapping_task.id,
+                        'title': overlapping_task.title,
+                        'start_time': overlapping_task.start_time,
+                        'end_time': overlapping_task.end_time,
+                        'date': overlapping_task.date
+                    }
+                }, status=status.HTTP_409_CONFLICT)
+    
+    try:
+        with transaction.atomic():
+            if mode == 'only_this':
+                # Editar apenas esta ocorrência
+                # Verifica se já existe uma ocorrência para esta data
+                try:
+                    occurrence = TaskOccurrence.objects.get(task=instance, date=occurrence_date)
+                    
+                    # Atualizar dados da ocorrência
+                    if 'status' in request.data:
+                        occurrence.status = request.data['status']
+                    if 'actual_value' in request.data:
+                        occurrence.actual_value = request.data['actual_value']
+                    if 'notes' in request.data:
+                        occurrence.notes = request.data['notes']
+                    
+                    occurrence.save()
+                except TaskOccurrence.DoesNotExist:
+                    # Se não existir, criar uma nova ocorrência modificada
+                    # (Para padrões recorrentes, isso é interpretado como uma exceção à regra)
+                    occurrence_data = {
+                        'task': instance,
+                        'date': occurrence_date,
+                        'status': request.data.get('status', 'pending'),
+                        'actual_value': request.data.get('actual_value'),
+                        'notes': request.data.get('notes', f"Modificada em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    }
+                    
+                    # Criar registro de ocorrência
+                    TaskOccurrence.objects.create(**occurrence_data)
+                
+                # Retornar os dados da tarefa original
+                serializer = self.get_serializer(instance)
+                return Response(serializer.data)
+            
+            elif mode == 'this_and_future':
+                # Editar esta ocorrência e todas as futuras
+                # Para isso, criamos uma nova tarefa com os novos dados
+                
+                # Se a data de início da recorrência for igual ou posterior à ocorrência,
+                # atualizamos a tarefa original
+                if instance.date >= occurrence_date:
+                    serializer = self.get_serializer(instance, data=request.data, partial=True)
+                    serializer.is_valid(raise_exception=True)
+                    self.perform_update(serializer)
+                    
+                    return Response(serializer.data)
+                else:
+                    # Caso contrário, marcamos o fim da tarefa original um dia antes da ocorrência
+                    from datetime import datetime, timedelta
+                    from django.utils.dateparse import parse_date
+                    
+                    occurrence_date_obj = parse_date(occurrence_date)
+                    end_date = occurrence_date_obj - timedelta(days=1)
+                    
+                    # Atualizar a data de término da recorrência original
+                    instance.repeat_end_date = end_date
+                    instance.save()
+                    
+                    # Criar uma nova tarefa com os novos dados
+                    new_task_data = request.data.copy()
+                    new_task_data['date'] = occurrence_date
+                    
+                    # Criar a nova tarefa
+                    serializer = self.get_serializer(data=new_task_data)
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save(user=request.user)
+                    
+                    return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+            elif mode == 'all':
+                # Editar todas as ocorrências - atualiza a tarefa principal
+                serializer = self.get_serializer(instance, data=request.data, partial=True)
+                serializer.is_valid(raise_exception=True)
+                self.perform_update(serializer)
+                
+                # Atualizar todas as ocorrências existentes que possam ter sido modificadas
+                if 'status' in request.data or 'actual_value' in request.data or 'notes' in request.data:
+                    occurrences = TaskOccurrence.objects.filter(task=instance)
+                    for occurrence in occurrences:
+                        if 'status' in request.data:
+                            occurrence.status = request.data['status']
+                        if 'actual_value' in request.data:
+                            occurrence.actual_value = request.data['actual_value']
+                        if 'notes' in request.data:
+                            occurrence.notes = request.data['notes']
+                        occurrence.save()
+                
+                return Response(serializer.data)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class TaskViewSet(viewsets.ModelViewSet):
     """API para gerenciar tarefas"""
@@ -205,6 +366,8 @@ class TaskViewSet(viewsets.ModelViewSet):
     def today(self, request):
         """Retorna tarefas para o dia atual, incluindo ocorrências geradas para tarefas recorrentes"""
         date_str = request.query_params.get('date')
+        status_filter = request.query_params.get('status')
+        
         if date_str:
             try:
                 selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -226,6 +389,12 @@ class TaskViewSet(viewsets.ModelViewSet):
             date=selected_date,
             task__user=request.user
         ).select_related('task')
+        
+        # Aplicar filtro de status (se fornecido)
+        if status_filter:
+            status_list = status_filter.split(',')
+            normal_tasks = normal_tasks.filter(status__in=status_list)
+            task_occurrences = task_occurrences.filter(status__in=status_list)
         
         occurrence_tasks = []
         for occurrence in task_occurrences:
@@ -286,8 +455,14 @@ class TaskViewSet(viewsets.ModelViewSet):
                     for o in occurrence_tasks
                 )
                 
+                # Aplicar filtro de status para tarefas geradas
                 if not occurrence_exists:
                     task_data = self.get_serializer(task).data
+                    
+                    # Se houver filtro de status, verificar se o status da tarefa gerada está na lista
+                    if status_filter and 'pending' not in status_list:  # Tarefas geradas são sempre 'pending'
+                        continue
+                        
                     task_data.update({
                         'date': selected_date.isoformat(),
                         'is_generated': True
@@ -298,6 +473,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         all_tasks = list(self.get_serializer(normal_tasks, many=True).data)
         all_tasks.extend(occurrence_tasks)
         all_tasks.extend(generated_tasks)
+        
+        # Ordenar todas as tarefas por hora de início
+        all_tasks.sort(key=lambda x: x['start_time'])
         
         return Response(all_tasks)
     
@@ -323,17 +501,27 @@ class TaskViewSet(viewsets.ModelViewSet):
         
         print(f"[DEBUG] Buscando tarefas para a semana: {start_date} a {end_date}")
         
+        # Aplicar filtro de status (se fornecido)
+        status_filter = request.query_params.get('status')
+        
         # 1. Obter tarefas normais (não recorrentes) para esta semana
         normal_tasks = self.get_queryset().filter(
             date__range=[start_date, end_date],
             repeat_pattern='none'
         )
         
+        if status_filter:
+            status_list = status_filter.split(',')
+            normal_tasks = normal_tasks.filter(status__in=status_list)
+        
         # 2. Obter ocorrências existentes para tarefas recorrentes
         task_occurrences = TaskOccurrence.objects.filter(
             date__range=[start_date, end_date],
             task__user=request.user
         ).select_related('task')
+        
+        if status_filter:
+            task_occurrences = task_occurrences.filter(status__in=status_list)
         
         occurrence_tasks = []
         for occurrence in task_occurrences:
@@ -400,6 +588,11 @@ class TaskViewSet(viewsets.ModelViewSet):
                     )
                     
                     if not occurrence_exists:
+                        # Se houver filtro de status, verificar se o status padrão ('pending') está na lista
+                        if status_filter and 'pending' not in status_filter.split(','):
+                            current_date += timedelta(days=1)
+                            continue
+                            
                         task_data = self.get_serializer(task).data
                         task_data.update({
                             'date': current_date.isoformat(),
@@ -413,6 +606,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         all_tasks = list(self.get_serializer(normal_tasks, many=True).data)
         all_tasks.extend(occurrence_tasks)
         all_tasks.extend(generated_tasks)
+        
+        # Ordenar tarefas primeiramente por data e depois por hora de início
+        all_tasks.sort(key=lambda x: (x['date'], x['start_time']))
         
         return Response(all_tasks)
 
@@ -901,3 +1097,107 @@ class TaskViewSet(viewsets.ModelViewSet):
             })
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def create(self, request, *args, **kwargs):
+        """Criar tarefa com verificação de sobreposição"""
+        # Verificar sobreposição de horários
+        date = request.data.get('date')
+        start_time = request.data.get('start_time')
+        end_time = request.data.get('end_time')
+        
+        # Adicionar um parâmetro opcional para ignorar a verificação de sobreposição
+        ignore_overlap = request.query_params.get('ignore_overlap', 'false').lower() == 'true'
+        
+        if not ignore_overlap and date and start_time and end_time:
+            overlapping_task = check_task_overlap(
+                user=request.user,
+                date=date,
+                start_time=start_time,
+                end_time=end_time
+            )
+            
+            if overlapping_task:
+                # Retornar erro com detalhes da sobreposição
+                return Response({
+                    'error': 'Sobreposição de horário detectada',
+                    'overlapping_task': {
+                        'id': overlapping_task.id,
+                        'title': overlapping_task.title,
+                        'start_time': overlapping_task.start_time,
+                        'end_time': overlapping_task.end_time,
+                        'date': overlapping_task.date
+                    }
+                }, status=status.HTTP_409_CONFLICT)
+        
+        # Se não houver sobreposição ou se for para ignorar, continuar com a criação
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    # No método update do TaskViewSet
+    def update(self, request, *args, **kwargs):
+        """Atualizar tarefa com verificação de sobreposição e suporte a tarefas recorrentes"""
+        # Recuperar a instância
+        instance = self.get_object()
+        
+        # Verificar se é para tratar como tarefa recorrente
+        mode = request.query_params.get('mode')
+        occurrence_date = request.query_params.get('date')
+        
+        # Se for tarefa recorrente e tiver modo especificado, tratar de forma especial
+        if instance.repeat_pattern and instance.repeat_pattern != 'none' and mode:
+            return self.update_recurring_task(instance, request, mode, occurrence_date)
+        
+        # Verificar sobreposição de horários
+        date = request.data.get('date', instance.date)
+        start_time = request.data.get('start_time', instance.start_time)
+        end_time = request.data.get('end_time', instance.end_time)
+        
+        # Adicionar um parâmetro opcional para ignorar a verificação de sobreposição
+        ignore_overlap = request.query_params.get('ignore_overlap', 'false').lower() == 'true'
+        
+        if not ignore_overlap and date and start_time and end_time:
+            overlapping_task = check_task_overlap(
+                user=request.user,
+                date=date,
+                start_time=start_time,
+                end_time=end_time,
+                exclude_task_id=instance.id  # Excluir a própria tarefa da verificação
+            )
+            
+            if overlapping_task:
+                # Retornar erro com detalhes da sobreposição
+                return Response({
+                    'error': 'Sobreposição de horário detectada',
+                    'overlapping_task': {
+                        'id': overlapping_task.id,
+                        'title': overlapping_task.title,
+                        'start_time': overlapping_task.start_time,
+                        'end_time': overlapping_task.end_time,
+                        'date': overlapping_task.date
+                    }
+                }, status=status.HTTP_409_CONFLICT)
+        
+        # Se não houver sobreposição ou se for para ignorar, continuar com a atualização
+        serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        if getattr(instance, '_prefetched_objects_cache', None):
+            # Se '_prefetched_objects_cache' existir, e neste caso queremos
+            # limpar a prefetched relation para que a instância serializada
+            # retorne dados atualizados.
+            instance._prefetched_objects_cache = {}
+        
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['put'])
+    def edit_recurring(self, request, pk=None):
+        """Endpoint específico para editar tarefas recorrentes"""
+        instance = self.get_object()
+        mode = request.query_params.get('mode', 'only_this')
+        occurrence_date = request.query_params.get('date')
+        
+        return self.update_recurring_task(instance, request, mode, occurrence_date)

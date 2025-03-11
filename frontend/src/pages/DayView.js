@@ -16,7 +16,8 @@ import {
   PencilIcon,
   TrashIcon,
   PlusIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 
@@ -36,12 +37,22 @@ export default function DayView() {
     dateParam ? parseISO(dateParam) : new Date()
   );
   const [tasks, setTasks] = useState([]);
+  const [filteredTasks, setFilteredTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const { updateTaskStatus } = useTasks();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
-
+  
+  // Estado para filtros
+  const [statusFilter, setStatusFilter] = useState({
+    pending: true,
+    in_progress: true,
+    completed: true,
+    failed: true,
+    skipped: true
+  });
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
   
   // Formata a data para exibição
   const formattedDate = format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR });
@@ -52,6 +63,11 @@ export default function DayView() {
   useEffect(() => {
     fetchTasks();
   }, [selectedDate]);
+  
+  useEffect(() => {
+    // Aplicar filtros quando as tarefas ou filtros mudarem
+    applyFilters();
+  }, [tasks, statusFilter]);
   
   const fetchTasks = async () => {
     setLoading(true);
@@ -71,6 +87,48 @@ export default function DayView() {
     } finally {
       setLoading(false);
     }
+  };
+  
+  // Aplicar filtros às tarefas
+  const applyFilters = () => {
+    // Filtrar por status
+    const filtered = tasks.filter(task => statusFilter[task.status] === true);
+    setFilteredTasks(filtered);
+  };
+  
+  // Alternar filtro de status específico
+  const toggleStatusFilter = (status) => {
+    setStatusFilter(prev => ({
+      ...prev,
+      [status]: !prev[status]
+    }));
+  };
+  
+  // Verificar se algum filtro está ativo
+  const isFilterActive = () => {
+    return Object.values(statusFilter).includes(false);
+  };
+  
+  // Resetar todos os filtros
+  const resetFilters = () => {
+    setStatusFilter({
+      pending: true,
+      in_progress: true,
+      completed: true,
+      failed: true,
+      skipped: true
+    });
+  };
+  
+  // Mostrar apenas tarefas pendentes e em andamento
+  const showActiveTasksOnly = () => {
+    setStatusFilter({
+      pending: true,
+      in_progress: true,
+      completed: false,
+      failed: false,
+      skipped: false
+    });
   };
   
   const handlePreviousDay = () => {
@@ -184,7 +242,7 @@ export default function DayView() {
     const eveningTasks = [];
     const nightTasks = [];
     
-    tasks.forEach(task => {
+    filteredTasks.forEach(task => {
       const hour = parseInt(task.start_time.split(':')[0], 10);
       
       if (hour >= 5 && hour < 12) {
@@ -390,6 +448,97 @@ export default function DayView() {
             <ArrowPathIcon className="h-4 w-4 mr-1" />
             <span>Atualizar</span>
           </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowFilterMenu(!showFilterMenu)}
+              className={`inline-flex items-center px-3 py-1.5 border ${isFilterActive() ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-300' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'} shadow-sm text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500`}
+            >
+              <FunnelIcon className="h-4 w-4 mr-1" />
+              <span>Filtrar</span>
+              {isFilterActive() && (
+                <span className="ml-1 w-2 h-2 rounded-full bg-primary-500"></span>
+              )}
+            </button>
+            
+            {showFilterMenu && (
+              <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-10">
+                <div className="py-1 divide-y divide-gray-200 dark:divide-gray-700">
+                  <div className="px-4 py-2">
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-white">Filtrar por status</h3>
+                    <div className="mt-2 space-y-2">
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={statusFilter.pending}
+                          onChange={() => toggleStatusFilter('pending')}
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                        />
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Pendente</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={statusFilter.in_progress}
+                          onChange={() => toggleStatusFilter('in_progress')}
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                        />
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Em andamento</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={statusFilter.completed}
+                          onChange={() => toggleStatusFilter('completed')}
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                        />
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Concluída</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={statusFilter.failed}
+                          onChange={() => toggleStatusFilter('failed')}
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                        />
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Falhou</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={statusFilter.skipped}
+                          onChange={() => toggleStatusFilter('skipped')}
+                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                        />
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Pulada</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="px-4 py-2">
+                    <button
+                      onClick={() => {
+                        showActiveTasksOnly();
+                        setShowFilterMenu(false);
+                      }}
+                      className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+                    >
+                      Mostrar apenas tarefas ativas
+                    </button>
+                  </div>
+                  <div className="px-4 py-2">
+                    <button
+                      onClick={() => {
+                        resetFilters();
+                        setShowFilterMenu(false);
+                      }}
+                      className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+                    >
+                      Limpar filtros
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           <Link
             to="/task/new"
             className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
@@ -405,10 +554,10 @@ export default function DayView() {
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
         </div>
-      ) : tasks.length === 0 ? (
+      ) : filteredTasks.length === 0 ? (
         <EmptyState 
-          title="Sem tarefas para hoje"
-          description="Não há tarefas planejadas para hoje. Que tal adicionar uma?"
+          title={tasks.length === 0 ? "Sem tarefas para hoje" : "Nenhuma tarefa corresponde aos filtros"}
+          description={tasks.length === 0 ? "Não há tarefas planejadas para hoje. Que tal adicionar uma?" : "Tente ajustar os filtros para ver mais tarefas."}
           buttonText="Adicionar Tarefa"
           buttonLink="task/new"
           icon={<CalendarIcon className="h-12 w-12 text-gray-400" />}

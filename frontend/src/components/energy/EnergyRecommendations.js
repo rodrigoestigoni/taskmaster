@@ -1,3 +1,4 @@
+// frontend/src/components/energy/EnergyRecommendations.js
 import React, { useState, useEffect } from 'react';
 import TaskService from '../../services/TaskService';
 

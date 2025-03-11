@@ -35,12 +35,18 @@ class TaskSerializer(serializers.ModelSerializer):
     category_color = serializers.CharField(source='category.color', read_only=True)
     goal_title = serializers.CharField(source='goal.title', read_only=True)
     
+    # Campo para controlar verificação de sobreposição no nível do serializador
+    ignore_overlap = serializers.BooleanField(write_only=True, required=False, default=False)
+    
     class Meta:
         model = Task
         fields = '__all__'
         read_only_fields = ('user',)
     
     def create(self, validated_data):
+        # Remover campo ignore_overlap se existir
+        ignore_overlap = validated_data.pop('ignore_overlap', False)
+        
         task = Task.objects.create(**validated_data)
         
         # Se for uma tarefa recorrente, gerar ocorrências para o período próximo
@@ -48,6 +54,38 @@ class TaskSerializer(serializers.ModelSerializer):
             self._generate_occurrences(task)
         
         return task
+    
+    def update(self, instance, validated_data):
+        # Remover campo ignore_overlap se existir
+        ignore_overlap = validated_data.pop('ignore_overlap', False)
+        
+        # Atualizar os campos da tarefa
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        
+        # Se os parâmetros de recorrência foram alterados, pode ser necessário regenerar ocorrências
+        if 'repeat_pattern' in validated_data or 'repeat_end_date' in validated_data:
+            # Tratar a regeneração de ocorrências aqui
+            pass
+            
+        return instance
+    
+    # Método auxiliar para verificar sobreposição
+    def _check_overlap(self, date, start_time, end_time, task_id=None):
+        """Verifica se há sobreposição com outras tarefas"""
+        from .utils import check_task_overlap
+        
+        user = self.context['request'].user
+        
+        return check_task_overlap(
+            user=user,
+            date=date,
+            start_time=start_time,
+            end_time=end_time,
+            exclude_task_id=task_id
+        )
     
     def _generate_occurrences(self, task):
         """Gera ocorrências iniciais para tarefas recorrentes"""
@@ -152,6 +190,12 @@ class TaskSerializer(serializers.ModelSerializer):
         
         return False
 
+class ModifiedTaskOccurrenceSerializer(serializers.ModelSerializer):
+    """Serializador para ocorrências de tarefas que foram modificadas individualmente"""
+    class Meta:
+        model = TaskOccurrence
+        fields = ('id', 'task', 'date', 'status', 'actual_value', 'notes')
+        read_only_fields = ('task',)
 
 class TaskOccurrenceSerializer(serializers.ModelSerializer):
     task_title = serializers.CharField(source='task.title', read_only=True)
@@ -163,6 +207,7 @@ class TaskOccurrenceSerializer(serializers.ModelSerializer):
     start_time = serializers.TimeField(source='task.start_time', read_only=True)
     end_time = serializers.TimeField(source='task.end_time', read_only=True)
     priority = serializers.IntegerField(source='task.priority', read_only=True)
+    energy_level = serializers.CharField(source='task.energy_level', read_only=True)
     
     class Meta:
         model = TaskOccurrence

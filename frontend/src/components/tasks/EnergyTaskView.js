@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { 
   BoltIcon,
   ClockIcon,
   CheckIcon,
   PlayIcon,
+  ArrowPathIcon,
   PencilIcon,
   TrashIcon,
+  ChevronRightIcon,
   CalendarIcon
-} from 'lucide-react';
+} from '@heroicons/react/24/outline';
 
 // Componente para exibir tarefas agrupadas por nível de energia
 const EnergyTaskView = ({ tasks, onStatusChange, onDeleteTask }) => {
@@ -32,21 +37,24 @@ const EnergyTaskView = ({ tasks, onStatusChange, onDeleteTask }) => {
   
   // Renderizar um card de tarefa
   const renderTaskCard = (task) => {
-    // Definir estilo com base no nível de energia
-    let energyColor, energyBg, energyText;
+    // Definir ícone e estilo com base no nível de energia
+    let energyIcon, energyColor, energyBg, energyText;
     
     switch(task.energy_level) {
       case 'high':
+        energyIcon = <BoltIcon className="h-4 w-4" />;
         energyColor = 'text-green-800 dark:text-green-200';
         energyBg = 'bg-green-100 dark:bg-green-900';
         energyText = 'Alta Energia';
         break;
       case 'medium':
+        energyIcon = <BoltIcon className="h-4 w-4" />;
         energyColor = 'text-blue-800 dark:text-blue-200';
         energyBg = 'bg-blue-100 dark:bg-blue-900';
         energyText = 'Energia Média';
         break;
       default:
+        energyIcon = <BoltIcon className="h-4 w-4" />;
         energyColor = 'text-yellow-800 dark:text-yellow-200';
         energyBg = 'bg-yellow-100 dark:bg-yellow-900';
         energyText = 'Baixa Energia';
@@ -78,9 +86,9 @@ const EnergyTaskView = ({ tasks, onStatusChange, onDeleteTask }) => {
           </h3>
           
           {/* Badge de nível de energia */}
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${energyBg} ${energyColor}`}>
-            <BoltIcon className="h-4 w-4 mr-1" />
-            <span>{energyText}</span>
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${energyBg} ${energyColor}`}>
+            {energyIcon}
+            <span className="ml-1">{energyText}</span>
           </span>
         </div>
         
@@ -108,12 +116,12 @@ const EnergyTaskView = ({ tasks, onStatusChange, onDeleteTask }) => {
           </div>
           
           <div className="flex space-x-2">
-            <button
-              onClick={() => alert('Editar tarefa: ' + task.id)}
+            <Link
+              to={`/task/edit/${task.id}`}
               className="inline-flex items-center p-1 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
             >
               <PencilIcon className="h-3 w-3" aria-hidden="true" />
-            </button>
+            </Link>
             <button
               onClick={() => onDeleteTask(task.id)}
               className="inline-flex items-center p-1 border border-gray-300 dark:border-gray-600 rounded-full shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
@@ -218,12 +226,12 @@ const EnergyTaskView = ({ tasks, onStatusChange, onDeleteTask }) => {
                 Crie uma nova tarefa para começar a organizar seu dia
               </p>
               <div className="mt-6">
-                <button
-                  onClick={() => alert('Criar nova tarefa')}
+                <Link
+                  to="/task/new"
                   className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
                 >
                   Nova Tarefa
-                </button>
+                </Link>
               </div>
             </div>
           )}
@@ -305,64 +313,4 @@ const EnergyTaskView = ({ tasks, onStatusChange, onDeleteTask }) => {
   );
 };
 
-// Adicionar dados de exemplo para demonstração
-const demoTasks = [
-  {
-    id: 1,
-    title: 'Reunião de Projeto',
-    energy_level: 'high',
-    start_time: '09:00',
-    end_time: '10:30',
-    category_color: '#4F46E5'
-  },
-  {
-    id: 2,
-    title: 'Treino de Alta Intensidade',
-    energy_level: 'high',
-    start_time: '07:00',
-    end_time: '08:00',
-    category_color: '#10B981'
-  },
-  {
-    id: 3,
-    title: 'Responder Emails',
-    energy_level: 'medium',
-    start_time: '14:00',
-    end_time: '15:00',
-    category_color: '#F59E0B'
-  },
-  {
-    id: 4,
-    title: 'Revisão de Documentos',
-    energy_level: 'medium',
-    start_time: '16:00',
-    end_time: '17:30',
-    category_color: '#3B82F6'
-  },
-  {
-    id: 5,
-    title: 'Leitura Tranquila',
-    energy_level: 'low',
-    start_time: '20:00',
-    end_time: '21:00',
-    category_color: '#8B5CF6'
-  }
-];
-
-const EnergyTaskViewDemo = () => {
-  const handleStatusChange = (id, status) => {
-    alert(`Tarefa ${id} alterada para status: ${status}`);
-  };
-  
-  const handleDelete = (id) => {
-    alert(`Excluir tarefa: ${id}`);
-  };
-  
-  return <EnergyTaskView 
-    tasks={demoTasks} 
-    onStatusChange={handleStatusChange} 
-    onDeleteTask={handleDelete} 
-  />;
-};
-
-export default EnergyTaskViewDemo;
+export default EnergyTaskView;

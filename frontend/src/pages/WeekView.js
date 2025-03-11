@@ -94,10 +94,13 @@ export default function WeekView() {
     return `${hours}:${minutes}`;
   };
   
-  // Filtra tarefas para um dia específico
+  // Filtra tarefas para um dia específico e ordena por hora de início
   const getTasksForDay = (date) => {
     const formattedDate = format(date, 'yyyy-MM-dd');
-    return weekTasks.filter(task => task.date === formattedDate);
+    const tasksForDay = weekTasks.filter(task => task.date === formattedDate);
+    
+    // Ordenar as tarefas por hora de início
+    return tasksForDay.sort((a, b) => a.start_time.localeCompare(b.start_time));
   };
   
   // Função para excluir uma tarefa

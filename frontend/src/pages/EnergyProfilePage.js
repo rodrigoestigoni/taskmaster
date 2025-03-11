@@ -1,31 +1,64 @@
 import React, { useState, useEffect } from 'react';
-import { BoltIcon, SunIcon, MoonIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
+import { toast } from 'react-toastify';
 
+// Componente simplificado de perfil de energia
 const EnergyProfilePage = () => {
-  // Em produção, isso seria carregado do backend
+  // Estado para armazenar o perfil de energia
   const [profile, setProfile] = useState({
-    earlyMorningEnergy: 5,
-    midMorningEnergy: 8,
-    lateMorningEnergy: 7,
-    earlyAfternoonEnergy: 6,
-    lateAfternoonEnergy: 4,
-    eveningEnergy: 3,
-    nightEnergy: 2,
-    mondayModifier: 0,
-    tuesdayModifier: 0,
-    wednesdayModifier: 0,
-    thursdayModifier: 0,
-    fridayModifier: -1,
-    saturdayModifier: 1,
-    sundayModifier: 2,
+    // Apenas 3 períodos do dia
+    morningEnergy: 8,    // Manhã (5h-12h)
+    afternoonEnergy: 6,  // Tarde (12h-18h) 
+    eveningEnergy: 4,    // Noite (18h-5h)
+    
+    // Dias da semana - valores entre -2 e +2 para modificar a energia
+    weekdayModifiers: [0, 0, 0, 0, -1, 1, 0]  // Seg, Ter, Qua, Qui, Sex, Sáb, Dom
   });
 
+  useEffect(() => {
+    const hasSeenEnergyIntro = localStorage.getItem('hasSeenEnergyIntro');
+    if (!hasSeenEnergyIntro) {
+      toast.info(
+        "👋 Bem-vindo ao gerenciamento de energia! Configure seu perfil de energia para receber recomendações personalizadas de tarefas com base nos seus níveis de energia ao longo do dia.", 
+        { autoClose: 8000 }
+      );
+      localStorage.setItem('hasSeenEnergyIntro', 'true');
+    }
+  }, []);
+
+  // Função para atualizar valores do perfil
   const handleChange = (key, value) => {
-    setProfile(prev => ({ ...prev, [key]: value }));
+    if (key.startsWith('weekday')) {
+      // Para modificadores de dia da semana
+      const index = parseInt(key.replace('weekday', ''), 10);
+      const newModifiers = [...profile.weekdayModifiers];
+      newModifiers[index] = value;
+      
+      setProfile(prev => ({
+        ...prev,
+        weekdayModifiers: newModifiers
+      }));
+    } else {
+      // Para níveis de energia
+      setProfile(prev => ({ ...prev, [key]: value }));
+    }
   };
 
-  // Componente de slider de energia com visualização
-  const EnergySlider = ({ name, value, onChange, label, icon }) => {
+  // Função para salvar o perfil
+  const handleSaveProfile = () => {
+    // Em uma implementação real, enviaríamos para o backend
+    // await TaskService.saveEnergyProfile(profile);
+    
+    toast.success('Perfil de energia salvo com sucesso!');
+  };
+
+  // Componente de slider de energia
+  const EnergySlider = ({ name, value, onChange, label, description }) => {
+    const getEnergyLabel = (level) => {
+      if (level >= 8) return "Alta Energia";
+      if (level >= 5) return "Energia Média";
+      return "Baixa Energia";
+    };
+    
     const getEnergyColor = (level) => {
       if (level >= 8) return 'bg-green-500';
       if (level >= 5) return 'bg-blue-500';
@@ -33,18 +66,23 @@ const EnergyProfilePage = () => {
     };
     
     return (
-      <div className="mb-4">
-        <label className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          {icon}
-          <span className="ml-2">{label}</span>
-        </label>
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-2">
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {label}
+          </label>
+          <div className={`px-2 py-1 rounded text-xs text-white ${getEnergyColor(value)}`}>
+            {getEnergyLabel(value)}
+          </div>
+        </div>
+        
         <div className="flex items-center space-x-3">
           <input
             type="range"
             min="1"
             max="10"
             value={value}
-            onChange={(e) => onChange(name, parseInt(e.target.value))}
+            onChange={(e) => onChange(name, parseInt(e.target.value, 10))}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
           />
           <div 
@@ -53,90 +91,37 @@ const EnergyProfilePage = () => {
             {value}
           </div>
         </div>
+        
+        {description && (
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{description}</p>
+        )}
       </div>
     );
   };
 
-  // Representação visual do perfil energético
-  const EnergyChart = () => {
-    const timePoints = [
-      { time: '6h', energy: profile.earlyMorningEnergy },
-      { time: '9h', energy: profile.midMorningEnergy },
-      { time: '12h', energy: profile.lateMorningEnergy },
-      { time: '15h', energy: profile.earlyAfternoonEnergy },
-      { time: '18h', energy: profile.lateAfternoonEnergy },
-      { time: '21h', energy: profile.eveningEnergy },
-      { time: '0h', energy: profile.nightEnergy },
-    ];
-
-    const getEnergyColor = (level) => {
-      if (level >= 8) return '#10B981'; // green-500
-      if (level >= 5) return '#3B82F6'; // blue-500
-      return '#F59E0B'; // yellow-500
-    };
-
+  // Componente para modificador de dia da semana
+  const WeekdayModifier = ({ index, value, onChange }) => {
+    const dayNames = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+    
     return (
-      <div className="mt-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-        <h3 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-3">
-          Seu Perfil de Energia
-        </h3>
-        
-        <div className="relative h-40 bg-gray-50 dark:bg-gray-900 rounded-lg">
-          {/* Eixo Y */}
-          <div className="absolute left-0 top-0 bottom-0 w-10 flex flex-col justify-between items-center text-xs text-gray-500 dark:text-gray-400 py-2">
-            <span>10</span>
-            <span>5</span>
-            <span>1</span>
+      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 flex flex-col items-center">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{dayNames[index]}</span>
+        <div className="flex items-center">
+          <button
+            onClick={() => onChange(`weekday${index}`, Math.max(-2, value - 1))}
+            className="w-8 h-8 flex items-center justify-center rounded-l-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300"
+          >
+            -
+          </button>
+          <div className="w-10 h-8 flex items-center justify-center bg-white dark:bg-gray-800 border-t border-b border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
+            {value > 0 ? `+${value}` : value}
           </div>
-          
-          {/* Área do gráfico */}
-          <div className="absolute left-10 right-0 top-0 bottom-0">
-            {/* Linhas de grade horizontais */}
-            <div className="absolute left-0 right-0 top-1/4 h-px bg-gray-200 dark:bg-gray-700"></div>
-            <div className="absolute left-0 right-0 top-1/2 h-px bg-gray-200 dark:bg-gray-700"></div>
-            <div className="absolute left-0 right-0 top-3/4 h-px bg-gray-200 dark:bg-gray-700"></div>
-            
-            {/* Pontos e linhas do gráfico */}
-            <svg className="absolute inset-0 w-full h-full">
-              <polyline
-                points={timePoints.map((point, index) => 
-                  `${index * (100/(timePoints.length-1))}%,${100 - (point.energy * 10)}%`
-                ).join(' ')}
-                fill="none"
-                stroke="url(#energyGradient)"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              
-              <defs>
-                <linearGradient id="energyGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#3B82F6" />
-                  <stop offset="50%" stopColor="#10B981" />
-                  <stop offset="100%" stopColor="#F59E0B" />
-                </linearGradient>
-              </defs>
-              
-              {timePoints.map((point, index) => (
-                <circle
-                  key={index}
-                  cx={`${index * (100/(timePoints.length-1))}%`}
-                  cy={`${100 - (point.energy * 10)}%`}
-                  r="4"
-                  fill={getEnergyColor(point.energy)}
-                  stroke="white"
-                  strokeWidth="1.5"
-                />
-              ))}
-            </svg>
-            
-            {/* Rótulos de tempo */}
-            <div className="absolute left-0 right-0 bottom-0 flex justify-between px-2 text-xs text-gray-500 dark:text-gray-400">
-              {timePoints.map((point, index) => (
-                <span key={index}>{point.time}</span>
-              ))}
-            </div>
-          </div>
+          <button
+            onClick={() => onChange(`weekday${index}`, Math.min(2, value + 1))}
+            className="w-8 h-8 flex items-center justify-center rounded-r-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300"
+          >
+            +
+          </button>
         </div>
       </div>
     );
@@ -146,130 +131,77 @@ const EnergyProfilePage = () => {
     <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
       <div className="mb-6">
         <h2 className="text-lg font-medium text-gray-900 dark:text-white flex items-center">
-          <BoltIcon className="h-5 w-5 mr-2 text-primary-500" />
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
           Seu Perfil de Energia
         </h2>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Configure seu padrão de energia ao longo do dia para otimizar o agendamento de tarefas.
+          Configure seu padrão de energia para otimizar suas tarefas ao longo do dia.
         </p>
       </div>
       
-      {/* Gráfico para visualização do perfil energético */}
-      <EnergyChart />
-      
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <h3 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center">
-            <SunIcon className="h-5 w-5 mr-2 text-orange-500" />
-            Períodos da Manhã e Tarde
-          </h3>
-          <EnergySlider 
-            name="earlyMorningEnergy" 
-            value={profile.earlyMorningEnergy} 
-            onChange={handleChange} 
-            label="Início da manhã (5h-8h)" 
-            icon={<SunIcon className="h-4 w-4 text-orange-300" />} 
-          />
-          <EnergySlider 
-            name="midMorningEnergy" 
-            value={profile.midMorningEnergy} 
-            onChange={handleChange} 
-            label="Meio da manhã (8h-11h)" 
-            icon={<SunIcon className="h-4 w-4 text-orange-400" />} 
-          />
-          <EnergySlider 
-            name="lateMorningEnergy" 
-            value={profile.lateMorningEnergy} 
-            onChange={handleChange} 
-            label="Final da manhã (11h-14h)" 
-            icon={<SunIcon className="h-4 w-4 text-orange-500" />} 
-          />
-          <EnergySlider 
-            name="earlyAfternoonEnergy" 
-            value={profile.earlyAfternoonEnergy} 
-            onChange={handleChange} 
-            label="Início da tarde (14h-17h)" 
-            icon={<SunIcon className="h-4 w-4 text-orange-400" />} 
-          />
-        </div>
+      {/* Níveis de energia do dia */}
+      <div className="mb-8">
+        <h3 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-4">
+          Níveis de Energia
+        </h3>
         
-        <div>
-          <h3 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center">
-            <MoonIcon className="h-5 w-5 mr-2 text-indigo-500" />
-            Períodos da Noite
-          </h3>
-          <EnergySlider 
-            name="lateAfternoonEnergy" 
-            value={profile.lateAfternoonEnergy} 
-            onChange={handleChange} 
-            label="Final da tarde (17h-20h)" 
-            icon={<SunIcon className="h-4 w-4 text-orange-300" />} 
-          />
-          <EnergySlider 
-            name="eveningEnergy" 
-            value={profile.eveningEnergy} 
-            onChange={handleChange} 
-            label="Noite (20h-23h)" 
-            icon={<MoonIcon className="h-4 w-4 text-indigo-300" />} 
-          />
-          <EnergySlider 
-            name="nightEnergy" 
-            value={profile.nightEnergy} 
-            onChange={handleChange} 
-            label="Madrugada (23h-5h)" 
-            icon={<MoonIcon className="h-4 w-4 text-indigo-500" />} 
-          />
-        </div>
+        <EnergySlider 
+          name="morningEnergy" 
+          value={profile.morningEnergy} 
+          onChange={handleChange} 
+          label="Manhã (5h-12h)" 
+          description="Configure seu nível de energia típico durante a manhã"
+        />
+        
+        <EnergySlider 
+          name="afternoonEnergy" 
+          value={profile.afternoonEnergy} 
+          onChange={handleChange} 
+          label="Tarde (12h-18h)" 
+          description="Configure seu nível de energia típico durante a tarde"
+        />
+        
+        <EnergySlider 
+          name="eveningEnergy" 
+          value={profile.eveningEnergy} 
+          onChange={handleChange} 
+          label="Noite (18h-5h)" 
+          description="Configure seu nível de energia típico durante a noite"
+        />
       </div>
       
-      <div className="mt-6">
-        <h3 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-3">
-          Modificadores por Dia da Semana
+      {/* Modificadores de dia da semana */}
+      <div className="mb-8">
+        <h3 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-4">
+          Diferenças por Dia da Semana
         </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-          Ajuste como sua energia varia por dia da semana. Valores positivos indicam mais energia, negativos indicam menos energia.
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Ajuste como sua energia varia em dias específicos. Valores positivos indicam mais energia, negativos indicam menos energia.
         </p>
         
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          {[
-            { key: 'mondayModifier', label: 'Segunda' },
-            { key: 'tuesdayModifier', label: 'Terça' },
-            { key: 'wednesdayModifier', label: 'Quarta' },
-            { key: 'thursdayModifier', label: 'Quinta' },
-            { key: 'fridayModifier', label: 'Sexta' },
-            { key: 'saturdayModifier', label: 'Sábado' },
-            { key: 'sundayModifier', label: 'Domingo' },
-          ].map((day) => (
-            <div key={day.key} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 flex flex-col items-center">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{day.label}</span>
-              <div className="flex items-center mt-2">
-                <button
-                  onClick={() => handleChange(day.key, Math.max(-3, profile[day.key] - 1))}
-                  className="w-8 h-8 flex items-center justify-center rounded-l-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300"
-                >
-                  -
-                </button>
-                <div className="w-10 h-8 flex items-center justify-center bg-white dark:bg-gray-800 border-t border-b border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
-                  {profile[day.key]}
-                </div>
-                <button
-                  onClick={() => handleChange(day.key, Math.min(3, profile[day.key] + 1))}
-                  className="w-8 h-8 flex items-center justify-center rounded-r-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300"
-                >
-                  +
-                </button>
-              </div>
-            </div>
+          {profile.weekdayModifiers.map((value, index) => (
+            <WeekdayModifier 
+              key={index}
+              index={index}
+              value={value}
+              onChange={handleChange}
+            />
           ))}
         </div>
       </div>
-
-      <div className="mt-6 flex justify-end">
+      
+      <div className="flex justify-end">
         <button
-          className="flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          onClick={handleSaveProfile}
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
         >
           Salvar Perfil
-          <ArrowRightIcon className="ml-2 h-4 w-4" />
+          <svg xmlns="http://www.w3.org/2000/svg" className="ml-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
         </button>
       </div>
     </div>
