@@ -1,11 +1,13 @@
 // frontend/src/components/energy/EnergyRecommendations.js
 import React, { useState, useEffect } from 'react';
 import TaskService from '../../services/TaskService';
+import { Link } from 'react-router-dom';
 
 const EnergyRecommendations = () => {
   const [loading, setLoading] = useState(true);
   const [recommendations, setRecommendations] = useState([]);
   const [currentEnergy, setCurrentEnergy] = useState(5);
+  const [error, setError] = useState(null);
   
   useEffect(() => {
     fetchRecommendations();
@@ -13,12 +15,15 @@ const EnergyRecommendations = () => {
   
   const fetchRecommendations = async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await TaskService.getEnergyRecommendations();
-      setRecommendations(response.data.recommended_tasks);
-      setCurrentEnergy(response.data.current_energy_level);
+      setRecommendations(response.data.recommended_tasks || []);
+      setCurrentEnergy(response.data.current_energy_level || 5);
     } catch (error) {
       console.error('Error fetching energy recommendations:', error);
+      setError('Não foi possível carregar as recomendações. Verifique seu perfil de energia.');
+      setRecommendations([]);
     } finally {
       setLoading(false);
     }
@@ -26,7 +31,20 @@ const EnergyRecommendations = () => {
   
   // Renderizar cada tarefa recomendada
   const renderTaskCard = (task) => {
-    // Renderização similar ao componente EnergyTaskView
+    // Função para determinar o estilo com base no nível de energia
+    const getEnergyStyle = (level) => {
+      switch(level) {
+        case 'high':
+          return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200';
+        case 'medium':
+          return 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200';
+        case 'low':
+          return 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200';
+        default:
+          return 'bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200';
+      }
+    };
+    
     return (
       <div 
         key={task.id} 
@@ -39,14 +57,27 @@ const EnergyRecommendations = () => {
           </h3>
           
           {/* Badge de nível de energia */}
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getEnergyStyle(task.energy_level)}`}>
             {task.energy_level === 'high' ? 'Alta Energia' : 
              task.energy_level === 'medium' ? 'Energia Média' : 'Baixa Energia'}
           </span>
         </div>
         
         <div className="mt-1 flex items-center text-xs text-gray-500 dark:text-gray-400">
-          <span>{task.start_time} - {task.end_time}</span>
+          {task.start_time && task.end_time ? (
+            <span>{task.start_time} - {task.end_time}</span>
+          ) : (
+            <span>Não agendada</span>
+          )}
+        </div>
+        
+        <div className="mt-2 flex justify-end">
+          <Link
+            to={`/enhanced_task/${task.id}`}
+            className="text-xs text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+          >
+            Ver detalhes
+          </Link>
         </div>
       </div>
     );
@@ -101,28 +132,54 @@ const EnergyRecommendations = () => {
       
       {renderEnergyLevel()}
       
-      <div className="mb-4">
-        <div className="text-sm font-medium text-gray-900 dark:text-white mb-2">
-          Tarefas ideais para seu nível de energia atual
+      {error ? (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-md text-sm">
+          {error}
+          <div className="mt-2 flex">
+            <Link 
+              to="/energy-profile" 
+              className="text-red-800 dark:text-red-300 hover:underline font-medium text-xs"
+            >
+              Configurar perfil de energia
+            </Link>
+          </div>
         </div>
-        
-        {recommendations.length > 0 ? (
-          <div className="space-y-3">
-            {recommendations.map(task => renderTaskCard(task))}
+      ) : (
+        <div className="mb-4">
+          <div className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+            Tarefas ideais para seu nível de energia atual
           </div>
-        ) : (
-          <div className="text-center py-6 text-gray-500 dark:text-gray-400">
-            Sem tarefas recomendadas no momento
-          </div>
-        )}
-      </div>
+          
+          {recommendations.length > 0 ? (
+            <div className="space-y-3">
+              {recommendations.map(task => renderTaskCard(task))}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+              <p>Sem tarefas recomendadas no momento</p>
+              <p className="text-xs mt-2">
+                Certifique-se de que você possui tarefas com níveis de energia definidos
+              </p>
+            </div>
+          )}
+        </div>
+      )}
       
-      <button
-        onClick={fetchRecommendations}
-        className="w-full flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
-      >
-        Atualizar recomendações
-      </button>
+      <div className="flex justify-between items-center">
+        <button
+          onClick={fetchRecommendations}
+          className="flex-grow flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+        >
+          Atualizar recomendações
+        </button>
+        
+        <Link 
+          to="/energy-profile"
+          className="ml-2 flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+        >
+          Editar perfil
+        </Link>
+      </div>
     </div>
   );
 };

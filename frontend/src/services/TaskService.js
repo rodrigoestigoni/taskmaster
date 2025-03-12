@@ -452,6 +452,37 @@ const TaskService = {
      */
     getEnergyRecommendations: async () => {
       return apiClient.get('/tasks/energy_recommendations/');
+    },
+
+    /**
+     * Obter o perfil de energia do usuário
+     * @returns {Promise} - Promessa com o perfil de energia
+     */
+    getEnergyProfile: async () => {
+      return apiClient.get('/energy-profile/current/');
+    },
+
+    /**
+     * Salvar o perfil de energia do usuário
+     * @param {Object} profile - Dados do perfil de energia
+     * @returns {Promise} - Promessa com os dados atualizados
+     */
+    saveEnergyProfile: async (profile) => {
+      try {
+        // Verificar se o perfil já existe
+        const currentProfile = await apiClient.get('/energy-profile/current/');
+        
+        // Se existe, atualizar
+        if (currentProfile.data && currentProfile.data.id) {
+          return apiClient.put(`/energy-profile/${currentProfile.data.id}/`, profile);
+        } else {
+          // Se não existe, criar novo
+          return apiClient.post('/energy-profile/', profile);
+        }
+      } catch (error) {
+        // Se der erro ao buscar, provavelmente não existe, então criar novo
+        return apiClient.post('/energy-profile/', profile);
+      }
     }
 };
 

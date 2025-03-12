@@ -688,12 +688,17 @@ export default function DayView() {
       )}
       {showTimeBlocker && (
         <div className="mt-4 mb-6">
+          {console.log(`Rendering TimeBlockingScheduler with ${tasks.length} tasks for date: ${format(selectedDate, 'yyyy-MM-dd')}`)}
           <TimeBlockingScheduler
             tasks={tasks}
             onScheduleTask={async (taskId, startTime, endTime) => {
               try {
+                console.log(`Scheduling task ${taskId} from ${startTime} to ${endTime}`);
                 const task = tasks.find(t => t.id === taskId);
-                if (!task) return;
+                if (!task) {
+                  console.error(`Task with ID ${taskId} not found`);
+                  return;
+                }
                 
                 await TaskService.updateTask(taskId, {
                   ...task,

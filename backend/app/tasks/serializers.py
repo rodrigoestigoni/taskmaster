@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from datetime import datetime, timedelta
-from .models import Task, Category, Goal, TaskOccurrence, UserPreference
+from .models import Task, Category, Goal, TaskOccurrence, UserPreference, EnergyProfile
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -247,3 +247,11 @@ class DashboardSerializer(serializers.Serializer):
     week = serializers.DictField()
     goals = serializers.DictField()
     completion_trend = serializers.ListField()
+
+
+class EnergyProfileSerializer(serializers.ModelSerializer):
+    """Serializer para o perfil de energia do usuário"""
+    class Meta:
+        model = EnergyProfile
+        fields = '__all__'
+        read_only_fields = ('user',)

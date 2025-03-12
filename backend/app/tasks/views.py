@@ -9,11 +9,12 @@ from django.utils import timezone
 
 from .utils import check_task_overlap, count_tasks_with_recurrences, count_total_tasks
 from .services import EnergyMatchService
-from .models import Task, Category, Goal, TaskOccurrence, UserPreference
+from .models import Task, Category, Goal, TaskOccurrence, UserPreference, EnergyProfile
 from .serializers import (
     TaskSerializer, CategorySerializer, GoalSerializer, 
     TaskOccurrenceSerializer, UserPreferenceSerializer,
-    TaskReportSerializer, GoalReportSerializer, DashboardSerializer
+    TaskReportSerializer, GoalReportSerializer, DashboardSerializer,
+    EnergyProfileSerializer
 )
 
 
@@ -1164,6 +1165,62 @@ class TaskViewSet(viewsets.ModelViewSet):
                 {'error': 'Modo de exclusão inválido'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+            
+            
+class EnergyProfileViewSet(viewsets.ModelViewSet):
+    """API para gerenciar o perfil de energia do usuário"""
+    serializer_class = EnergyProfileSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Retorna apenas o perfil de energia do usuário atual"""
+        return EnergyProfile.objects.filter(user=self.request.user)
+    
+    def get_object(self):
+        """Obtém ou cria um perfil de energia para o usuário atual"""
+        profile, created = EnergyProfile.objects.get_or_create(
+            user=self.request.user,
+            defaults={
+                # Valores padrão quando um novo perfil é criado
+                'early_morning_energy': 5,
+                'mid_morning_energy': 7,
+                'late_morning_energy': 6,
+                'early_afternoon_energy': 5,
+                'late_afternoon_energy': 4,
+                'evening_energy': 3,
+                'night_energy': 2,
+                'monday_modifier': 0,
+                'tuesday_modifier': 0,
+                'wednesday_modifier': 0,
+                'thursday_modifier': 0,
+                'friday_modifier': -1,
+                'saturday_modifier': 1,
+                'sunday_modifier': 0
+            }
+        )
+        return profile
+    
+    def perform_create(self, serializer):
+        """Salva o perfil atribuindo o usuário atual"""
+        serializer.save(user=self.request.user)
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Custom update method for EnergyProfile to avoid using TaskViewSet's update
+        which expects Task model attributes.
+        """
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+        
+    @action(detail=False, methods=['get'])
+    def current(self, request):
+        """Retorna o perfil de energia do usuário atual"""
+        profile = self.get_object()
+        serializer = self.get_serializer(profile)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
@@ -1320,13 +1377,17 @@ class TaskViewSet(viewsets.ModelViewSet):
             current_energy = EnergyMatchService.get_current_energy_level(request.user)
             recommended_tasks = EnergyMatchService.get_recommended_tasks(request.user)
             
-            serializer = self.get_serializer(recommended_tasks, many=True)
+            # Use explicitly TaskSerializer instead of self.get_serializer
+            from .serializers import TaskSerializer
+            serializer = TaskSerializer(recommended_tasks, many=True)
             
             return Response({
                 'current_energy_level': current_energy,
                 'recommended_tasks': serializer.data
             })
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     def create(self, request, *args, **kwargs):
@@ -1373,6 +1434,15 @@ class TaskViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             instance = self.get_object()
             
+            # Check if this is a Task instance
+            if not isinstance(instance, Task):
+                # For non-Task instances, use the default update behavior
+                serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
+                serializer.is_valid(raise_exception=True)
+                self.perform_update(serializer)
+                return Response(serializer.data)
+            
+            # Task-specific update logic follows
             # Salvar valores antigos
             old_status = instance.status
             old_actual_value = instance.actual_value or 0

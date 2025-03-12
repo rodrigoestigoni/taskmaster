@@ -15,25 +15,56 @@ const TimeBlockingScheduler = ({ tasks, onScheduleTask, onDetectConflict }) => {
     generateTimeBlocks();
   }, [selectedHours]);
   
+  // Debug helper to inspect task structure
+  const inspectTask = (task) => {
+    return {
+      id: task.id,
+      title: task.title,
+      start_time: task.start_time,
+      end_time: task.end_time,
+      priority: task.priority,
+      category: task.category_name,
+      duration: task.duration_minutes
+    };
+  };
+
   // Update schedule and unscheduled tasks when tasks change
   useEffect(() => {
-    if (tasks && tasks.length > 0) {
-      // Filter tasks for today
-      const todayTasks = tasks.filter(task => 
-        new Date(task.date).toDateString() === new Date().toDateString()
-      );
-      
-      // Separate scheduled and unscheduled tasks
-      const scheduled = todayTasks.filter(task => 
-        task.start_time && task.end_time
-      );
-      
-      const unscheduled = todayTasks.filter(task => 
-        !task.start_time || !task.end_time
-      );
-      
-      setSchedule(scheduled);
-      setUnscheduledTasks(unscheduled);
+    // Always reset the state even if tasks array is empty
+    if (!tasks || tasks.length === 0) {
+      setSchedule([]);
+      setUnscheduledTasks([]);
+      console.log('TimeBlockingScheduler: No tasks provided');
+      return;
+    }
+    
+    // Use all tasks for the current view - they're already filtered by date in DayView
+    
+    // Log task structure to help debugging
+    console.log('First task structure:', inspectTask(tasks[0]));
+    
+    // Separate scheduled and unscheduled tasks
+    const scheduled = tasks.filter(task => 
+      task.start_time && task.end_time
+    );
+    
+    const unscheduled = tasks.filter(task => 
+      !task.start_time || !task.end_time
+    );
+    
+    setSchedule(scheduled);
+    setUnscheduledTasks(unscheduled);
+    
+    // Log for debugging
+    console.log(`TimeBlockingScheduler: ${scheduled.length} scheduled tasks, ${unscheduled.length} unscheduled tasks`);
+    
+    // Log a sample of each type if available
+    if (scheduled.length > 0) {
+      console.log('Sample scheduled task:', inspectTask(scheduled[0]));
+    }
+    
+    if (unscheduled.length > 0) {
+      console.log('Sample unscheduled task:', inspectTask(unscheduled[0]));
     }
   }, [tasks]);
   
@@ -201,33 +232,77 @@ const TimeBlockingScheduler = ({ tasks, onScheduleTask, onDetectConflict }) => {
     const task = getTaskForBlock(block);
     if (!task) return "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600";
     
+    // Get whether this is the start block for this task
+    const isStartBlock = task.start_time === block.startTime;
+    
     // Style based on task priority
-    switch(parseInt(task.priority, 10)) {
+    let baseClass = "";
+    
+    // Convert priority to number if it's a string
+    const priorityNum = typeof task.priority === 'string' ? 
+      parseInt(task.priority, 10) : task.priority;
+    
+    switch(priorityNum) {
       case 4: // Urgent
-        return "bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-800";
+        baseClass = "bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-800";
+        break;
       case 3: // High
-        return "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 hover:bg-orange-200 dark:hover:bg-orange-800";
+        baseClass = "bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 hover:bg-orange-200 dark:hover:bg-orange-800";
+        break;
       case 2: // Medium
-        return "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800";
+        baseClass = "bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800";
+        break;
       case 1: // Low
-        return "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800";
+        baseClass = "bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 hover:bg-green-200 dark:hover:bg-green-800";
+        break;
       default:
-        return "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600";
+        baseClass = "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600";
     }
+    
+    // Add visual indicator for the first block of a task
+    if (isStartBlock) {
+      baseClass += " border-l-4 border-current";
+    }
+    
+    return baseClass;
   };
   
   // Handle drag events for unscheduled tasks
   const handleDragStart = (e, task) => {
-    e.dataTransfer.setData("taskId", task.id);
+    console.log('Drag started for task:', task.id, task.title);
+    // Store task ID as string to ensure proper comparison later
+    e.dataTransfer.setData("text/plain", task.id.toString());
+    
+    // Add some effects to improve drag visualization
+    setTimeout(() => {
+      e.target.classList.add('opacity-50');
+    }, 0);
+  };
+  
+  // Handle drag end to reset visual effects
+  const handleDragEnd = (e) => {
+    e.target.classList.remove('opacity-50');
   };
   
   // Handle dropping a task onto a time block
   const handleDrop = (e, block) => {
     e.preventDefault();
-    const taskId = e.dataTransfer.getData("taskId");
+    console.log('Drop event on block:', block.startTime);
+    
+    // Get task ID from dataTransfer
+    const taskId = e.dataTransfer.getData("text/plain");
+    console.log('Retrieved taskId from drop:', taskId);
+    
+    // Find the task in unscheduledTasks array
     const task = unscheduledTasks.find(t => t.id.toString() === taskId);
     
-    if (!task) return;
+    if (!task) {
+      console.error('Task not found in unscheduledTasks:', taskId);
+      console.log('Available unscheduled tasks:', unscheduledTasks.map(t => ({id: t.id, title: t.title})));
+      return;
+    }
+    
+    console.log('Found task to schedule:', task.title);
     
     // Calculate end time based on task duration
     const durationMinutes = task.duration_minutes || 30; // Default to 30 minutes
@@ -236,6 +311,8 @@ const TimeBlockingScheduler = ({ tasks, onScheduleTask, onDetectConflict }) => {
     const endHours = Math.floor(endMinutes / 60);
     const endMins = endMinutes % 60;
     const endTime = `${endHours.toString().padStart(2, '0')}:${endMins.toString().padStart(2, '0')}`;
+    
+    console.log(`Scheduling from ${block.startTime} to ${endTime}`);
     
     // Check for conflicts
     const proposedTask = {
@@ -247,6 +324,7 @@ const TimeBlockingScheduler = ({ tasks, onScheduleTask, onDetectConflict }) => {
     
     const conflict = checkTaskOverlap(schedule, proposedTask);
     if (conflict) {
+      console.log('Conflict detected:', conflict);
       if (onDetectConflict) {
         onDetectConflict(task, conflict);
       }
@@ -255,6 +333,7 @@ const TimeBlockingScheduler = ({ tasks, onScheduleTask, onDetectConflict }) => {
     
     // Schedule the task
     if (onScheduleTask) {
+      console.log('Calling onScheduleTask with:', task.id, block.startTime, endTime);
       onScheduleTask(task.id, block.startTime, endTime);
     }
   };
@@ -262,6 +341,13 @@ const TimeBlockingScheduler = ({ tasks, onScheduleTask, onDetectConflict }) => {
   // Allow dropping on time blocks
   const handleDragOver = (e) => {
     e.preventDefault();
+    // Add visual indicator for drop target
+    e.currentTarget.classList.add('bg-opacity-70');
+  };
+  
+  // Clear visual indicator when dragging leaves the element
+  const handleDragLeave = (e) => {
+    e.currentTarget.classList.remove('bg-opacity-70');
   };
   
   return (
@@ -317,19 +403,23 @@ const TimeBlockingScheduler = ({ tasks, onScheduleTask, onDetectConflict }) => {
                 return (
                   <div 
                     key={block.id}
-                    className={`px-2 py-1 border-b border-gray-200 dark:border-gray-700 ${getBlockClass(block)}`}
+                    className={`px-2 py-1 border-b border-gray-200 dark:border-gray-700 transition-colors ${getBlockClass(block)}`}
                     onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, block)}
+                    data-block-id={block.id}
                   >
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center min-h-[24px]">
                       <span className="text-xs font-medium">
                         {block.startTime}
                       </span>
                       
-                      {isBlockStart && (
-                        <span className="text-xs truncate">
-                          {task.title}
-                        </span>
+                      {isBlockStart && task && (
+                        <div className="flex-1 flex justify-end">
+                          <span className="text-xs truncate max-w-[70%] font-medium ml-2 px-1 py-0.5 rounded bg-opacity-50 bg-white dark:bg-opacity-20 dark:bg-black">
+                            {task.title}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -353,9 +443,11 @@ const TimeBlockingScheduler = ({ tasks, onScheduleTask, onDetectConflict }) => {
                 {unscheduledTasks.map((task) => (
                   <div
                     key={task.id}
-                    draggable
+                    draggable="true"
                     onDragStart={(e) => handleDragStart(e, task)}
-                    className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 cursor-move hover:bg-gray-50 dark:hover:bg-gray-700"
+                    onDragEnd={handleDragEnd}
+                    className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 cursor-move hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200"
+                    data-task-id={task.id}
                   >
                     <div className="flex justify-between">
                       <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
@@ -364,9 +456,9 @@ const TimeBlockingScheduler = ({ tasks, onScheduleTask, onDetectConflict }) => {
                       
                       {task.priority && (
                         <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                          task.priority === '4' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                          task.priority === '3' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
-                          task.priority === '2' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                          task.priority === '4' || task.priority === 4 ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                          task.priority === '3' || task.priority === 3 ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
+                          task.priority === '2' || task.priority === 2 ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
                           'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                         }`}>
                           P{task.priority}
