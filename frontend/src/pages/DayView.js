@@ -28,6 +28,7 @@ import { useTasks } from '../context/TaskContext';
 import TaskStatusBadge from '../components/tasks/TaskStatusBadge';
 import TaskPriorityBadge from '../components/tasks/TaskPriorityBadge';
 import EmptyState from '../components/common/EmptyState';
+import TaskCompletionModal from '../components/common/TaskCompletionModal';
 import DeleteTaskModal from '../components/common/DeleteTaskModal';
 import TimeBlockingScheduler from '../components/common/TimeBlockingScheduler';
 
@@ -47,6 +48,10 @@ export default function DayView() {
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
+  
+  // Estado para o modal de conclusão com meta
+  const [completionModalOpen, setCompletionModalOpen] = useState(false);
+  const [taskToComplete, setTaskToComplete] = useState(null);
   
   // Estado para filtros
   const [statusFilter, setStatusFilter] = useState({
@@ -148,12 +153,13 @@ export default function DayView() {
   };
   
   const handleStatusChange = async (taskId, newStatus, actualValue = null, notes = null) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    // Se não tem meta ou não está sendo concluída, proceder normalmente
     try {
       // Obtenha o token de autenticação
       const token = localStorage.getItem('accessToken');
-      
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
       
       // Prepare os dados da requisição
       const data = {
@@ -166,7 +172,7 @@ export default function DayView() {
       if (notes) data.notes = notes;
       
       // Faça a requisição diretamente com axios
-      const response = await axios.post(
+      await axios.post(
         `/api/tasks/${taskId}/update_status/`,
         data,
         {
@@ -192,6 +198,28 @@ export default function DayView() {
     } catch (error) {
       console.error('Erro ao atualizar status:', error);
       toast.error('Erro ao atualizar status');
+    }
+  };
+  
+  // Função para concluir a tarefa com valor definido pelo usuário
+  const handleCompletionConfirm = async ({ actualValue, notes }) => {
+    if (!taskToComplete) return;
+    
+    try {
+      await handleStatusChange(
+        taskToComplete.id, 
+        'completed', 
+        actualValue, 
+        notes
+      );
+      
+      toast.success('Tarefa concluída e meta atualizada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao concluir tarefa com meta:', error);
+      toast.error('Erro ao concluir tarefa');
+    } finally {
+      setCompletionModalOpen(false);
+      setTaskToComplete(null);
     }
   };
 
@@ -452,43 +480,49 @@ export default function DayView() {
   return (
     <div>
       {/* Date navigation */}
-      <div className="mb-6 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={handlePreviousDay}
-            className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
-          </button>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{displayDate}</h1>
-          <button
-            onClick={handleNextDay}
-            className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            <ChevronRightIcon className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </div>
-        <div className="flex space-x-2">
+      <div className="mb-6">
+        {/* Date selector and navigation */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            <button
+              onClick={handlePreviousDay}
+              className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            >
+              <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">{displayDate}</h1>
+            <button
+              onClick={handleNextDay}
+              className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            >
+              <ChevronRightIcon className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
           <button
             onClick={handleToday}
             className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
             <span>Hoje</span>
           </button>
+        </div>
+        
+        {/* Action buttons - placed in a scrollable row on mobile if needed */}
+        <div className="flex flex-wrap gap-2 items-center justify-start">
           <button
             onClick={fetchTasks}
             className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
-            <ArrowPathIcon className="h-4 w-4 mr-1" />
-            <span>Atualizar</span>
+            <ArrowPathIcon className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Atualizar</span>
           </button>
+          
           <div className="relative">
             <button
               onClick={() => setShowFilterMenu(!showFilterMenu)}
               className={`inline-flex items-center px-3 py-1.5 border ${isFilterActive() ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-300' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'} shadow-sm text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500`}
             >
-              <FunnelIcon className="h-4 w-4 mr-1" />
-              <span>Filtrar</span>
+              <FunnelIcon className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Filtrar</span>
               {isFilterActive() && (
                 <span className="ml-1 w-2 h-2 rounded-full bg-primary-500"></span>
               )}
@@ -573,20 +607,22 @@ export default function DayView() {
               </div>
             )}
           </div>
+          
           <Link
             to="/task/new"
             className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
           >
-            <PlusIcon className="h-4 w-4 mr-1" />
-            <span>Nova Tarefa</span>
+            <PlusIcon className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Nova Tarefa</span>
           </Link>
+          
           <button
-              onClick={() => setShowTimeBlocker(!showTimeBlocker)}
-              className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-            >
-              <ClockIcon className="h-4 w-4 mr-1" />
-              <span>{showTimeBlocker ? 'Ocultar Agenda' : 'Planejador'}</span>
-            </button>
+            onClick={() => setShowTimeBlocker(!showTimeBlocker)}
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            <ClockIcon className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">{showTimeBlocker ? 'Ocultar Agenda' : 'Planejador'}</span>
+          </button>
         </div>
       </div>
       
@@ -678,6 +714,22 @@ export default function DayView() {
           />
         </div>
       )}
+      
+      {/* Modal para confirmar exclusão de tarefa recorrente */}
+      <DeleteTaskModal
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        isRecurring={taskToDelete?.repeat_pattern && taskToDelete.repeat_pattern !== 'none'}
+      />
+      
+      {/* Modal para completar tarefa com meta */}
+      <TaskCompletionModal
+        isOpen={completionModalOpen}
+        onClose={() => setCompletionModalOpen(false)}
+        onConfirm={handleCompletionConfirm}
+        task={taskToComplete}
+      />
     </div>
   );
 }

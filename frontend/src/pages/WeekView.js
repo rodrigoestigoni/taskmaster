@@ -104,16 +104,47 @@ export default function WeekView() {
   };
   
   // Função para excluir uma tarefa
-  const handleDeleteTask = async (taskId) => {
-    if (window.confirm('Tem certeza que deseja excluir esta tarefa?')) {
-      try {
-        await TaskService.deleteTask(taskId);
-        toast.success('Tarefa excluída com sucesso');
-        // Atualizar a lista de tarefas após excluir
-        fetchWeekTasks();
-      } catch (error) {
-        console.error('Error deleting task:', error);
-        toast.error('Erro ao excluir tarefa');
+  const handleDeleteTask = async (task) => {
+    const isRecurring = TaskService.isRecurringTask(task);
+    
+    if (!isRecurring) {
+      // Processo normal para tarefas não recorrentes
+      if (window.confirm('Tem certeza que deseja excluir esta tarefa?')) {
+        try {
+          await TaskService.deleteTask(task.id);
+          toast.success('Tarefa excluída com sucesso');
+          // Atualizar a lista de tarefas após excluir
+          fetchWeekTasks();
+        } catch (error) {
+          console.error('Error deleting task:', error);
+          toast.error('Erro ao excluir tarefa');
+        }
+      }
+    } else {
+      // Processo para tarefas recorrentes
+      const options = [
+        { mode: 'only_this', label: 'Apenas esta ocorrência' },
+        { mode: 'this_and_future', label: 'Esta e todas as futuras' },
+        { mode: 'all', label: 'Todas as ocorrências' }
+      ];
+      
+      const mode = window.confirm('Esta é uma tarefa recorrente. Deseja excluir apenas esta ocorrência ou todas?') 
+        ? window.confirm('Excluir apenas esta ocorrência?') 
+          ? 'only_this' 
+          : window.confirm('Excluir esta e todas as futuras?') 
+            ? 'this_and_future' 
+            : 'all'
+        : null;
+      
+      if (mode) {
+        try {
+          await TaskService.deleteRecurringTask(task.id, mode, task.date);
+          toast.success('Tarefa recorrente excluída com sucesso');
+          fetchWeekTasks();
+        } catch (error) {
+          console.error('Error deleting recurring task:', error);
+          toast.error('Erro ao excluir tarefa recorrente');
+        }
       }
     }
   };
@@ -136,6 +167,14 @@ export default function WeekView() {
         <div className="mt-1 flex items-center text-xs text-gray-500 dark:text-gray-400">
           <ClockIcon className="h-3 w-3 mr-1" />
           <span>{formatTime(task.start_time)} - {formatTime(task.end_time)}</span>
+          {TaskService.isRecurringTask(task) && (
+            <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+              </svg>
+              Recorrente
+            </span>
+          )}
         </div>
         
         <div className="mt-2 flex justify-between items-center">
@@ -149,7 +188,7 @@ export default function WeekView() {
               Editar
             </Link>
             <button
-              onClick={() => handleDeleteTask(task.id)}
+              onClick={() => handleDeleteTask(task)}
               className="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
             >
               Excluir

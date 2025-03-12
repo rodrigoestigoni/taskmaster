@@ -161,17 +161,20 @@ const TaskService = {
      * @returns {Promise} - Promessa com a resposta da atualização
      */
     updateRecurringTask: async (id, taskData, mode, date = null) => {
-      // Implementação frontend simulada
-      // No backend real, precisaria criar um endpoint específico
-      
-      // Adicionar o modo como parâmetro na URL
-      let url = `/tasks/${id}/`;
+      // Usar o endpoint específico para tarefas recorrentes
+      let url = `/tasks/${id}/edit_recurring/`;
       
       // Adicionar os parâmetros mode e date
       const params = new URLSearchParams();
       params.append('mode', mode);
       if (date && mode !== 'all') {
         params.append('date', date);
+      }
+      
+      // Adicionar parâmetro ignore_overlap se necessário
+      if (taskData.ignore_overlap) {
+        params.append('ignore_overlap', 'true');
+        delete taskData.ignore_overlap; // Remover do corpo da requisição
       }
       
       url += `?${params.toString()}`;

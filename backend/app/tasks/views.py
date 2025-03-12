@@ -165,8 +165,64 @@ class GoalViewSet(viewsets.ModelViewSet):
         
         return Response(serializer.data)
 
-def task_counts_by_day_formatter(by_day_dict):
-    for date_str, counts in by_day_dict.items():
+def task_counts_by_day_formatter(by_day_dict, user=None):
+    """
+    Formata contagens diárias para o gráfico de tendência de conclusão.
+    Garante que dados recentes sejam incluídos, mesmo os de hoje.
+    
+    Args:
+        by_day_dict: Dicionário com contagens por dia
+        user: Usuário para cálculos de hoje
+    
+    Returns:
+        Gerador que produz dicionários formatados para o gráfico
+    """
+    from datetime import datetime, timedelta
+    
+    # Obter hoje para garantir que está incluído
+    today = datetime.now().date().isoformat()
+    print(f"[DEBUG] Formatando contagens por dia - hoje é {today}")
+    print(f"[DEBUG] Dicionário by_day possui {len(by_day_dict)} dias: {list(by_day_dict.keys())}")
+    
+    # Certificar-se de que temos todas as datas no intervalo
+    # Caso algumas datas não tenham tarefas
+    if by_day_dict and len(by_day_dict) > 1:
+        dates = sorted(by_day_dict.keys())
+        start_date = datetime.strptime(dates[0], '%Y-%m-%d')
+        end_date = datetime.strptime(dates[-1], '%Y-%m-%d')
+        
+        # Se hoje não está incluído, adicionar
+        if today not in by_day_dict:
+            print(f"[DEBUG] Hoje ({today}) não estava nas contagens - adicionando")
+            # Acessa as contagens diretas de hoje
+            from .utils import count_total_tasks
+            from django.utils import timezone
+            if user:
+                today_counts = count_total_tasks(user=user, date=timezone.localdate())
+                by_day_dict[today] = {
+                    'total': today_counts['total'],
+                    'completed': today_counts['completed'],
+                    'pending': today_counts['pending']
+                }
+            else:
+                # Se não houver usuário, usar valores vazios
+                by_day_dict[today] = {'total': 0, 'completed': 0}
+            print(f"[DEBUG] Contagens calculadas para hoje: {by_day_dict[today]}")
+            end_date = max(end_date, datetime.now())
+        
+        # Preencher dias faltantes no intervalo
+        current = start_date
+        while current <= end_date:
+            date_str = current.date().isoformat()
+            if date_str not in by_day_dict:
+                by_day_dict[date_str] = {'total': 0, 'completed': 0}
+            current += timedelta(days=1)
+    
+    # Ordenar datas para garantir ordem cronológica
+    sorted_dates = sorted(by_day_dict.keys())
+    
+    for date_str in sorted_dates:
+        counts = by_day_dict[date_str]
         yield {
             'date': date_str,
             'total': counts['total'],
@@ -908,25 +964,40 @@ class TaskViewSet(viewsets.ModelViewSet):
         """Retorna dados consolidados para o dashboard"""
         today = timezone.localdate()
         
-        # Usar a função utilitária para contar tarefas de hoje
-        today_counts = count_tasks_with_recurrences(request.user, date=today)
-        
         # Tarefas da semana
         start_of_week = today - timedelta(days=today.weekday())
         end_of_week = start_of_week + timedelta(days=6)
+        
+        # Obter contagens detalhadas para o gráfico de tendência
         week_counts = count_tasks_with_recurrences(
             request.user, 
             date_range=(start_of_week, end_of_week)
+        )
+        
+        # Também obter dados específicos para a semana anterior para comparação
+        last_week_start = start_of_week - timedelta(days=7)
+        last_week_end = end_of_week - timedelta(days=7)
+        
+        # Estender o período para o gráfico de tendência (últimos 30 dias)
+        trend_start = today - timedelta(days=30)
+        trend_counts = count_tasks_with_recurrences(
+            request.user, 
+            date_range=(trend_start, today)
         )
         
         # Progresso das metas
         goals = Goal.objects.filter(user=request.user)
         active_goals = goals.filter(end_date__gte=today, is_completed=False)
         
-        # Formatando os dados para o serializer
+        # Formatando os dados para o serializer usando a função atualizada
         today_stats = count_total_tasks(request.user, date=timezone.localdate())
         week_stats = count_total_tasks(request.user, date_range=(start_of_week, end_of_week))
-        print(f"[DEBUG] today_stats: {today_stats}, week_stats: {week_stats}")
+        
+        # Log para depuração
+        print(f"[DEBUG] today_stats: {today_stats}")
+        print(f"[DEBUG] week_stats: {week_stats}")
+        print(f"[DEBUG] today high_priority: {today_stats.get('high_priority', 0)}")
+        print(f"[DEBUG] week completion_rate: {week_stats.get('completion_rate', 0)}")
         
         # Gerar resposta
         serializer = DashboardSerializer({
@@ -938,7 +1009,8 @@ class TaskViewSet(viewsets.ModelViewSet):
                 'completed': goals.filter(is_completed=True).count(),
                 'close_to_deadline': active_goals.filter(end_date__lte=today + timedelta(days=7)).count(),
             },
-            'completion_trend': list(task_counts_by_day_formatter(week_counts['by_day'])),
+            # Usar o formatter atualizado com dados de tendência de 30 dias
+            'completion_trend': list(task_counts_by_day_formatter(trend_counts['by_day'], request.user)),
         })
         
         return Response(serializer.data)
@@ -1369,5 +1441,12 @@ class TaskViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         mode = request.query_params.get('mode', 'only_this')
         occurrence_date = request.query_params.get('date')
+        
+        # Verificar se é uma tarefa recorrente
+        if instance.repeat_pattern == 'none':
+            return Response(
+                {'error': 'Esta não é uma tarefa recorrente'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         return self.update_recurring_task(instance, request, mode, occurrence_date)

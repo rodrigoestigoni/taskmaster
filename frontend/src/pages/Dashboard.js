@@ -50,6 +50,12 @@ export default function Dashboard() {
         return obj[key];
       };
       
+      // Log para depuração
+      console.debug('Dashboard API response:', response.data);
+      console.debug('High priority tasks:', response.data?.today?.high_priority);
+      console.debug('Week completion rate:', response.data?.week?.completion_rate);
+      console.debug('Completion trend:', response.data?.completion_trend);
+      
       const processedData = {
         today: {
           total: ensureValue(response.data?.today, 'total'),
@@ -71,6 +77,32 @@ export default function Dashboard() {
         },
         completion_trend: response.data?.completion_trend || []
       };
+      
+      // Verificar se há dados de hoje no gráfico de tendência
+      if (processedData.completion_trend.length > 0) {
+        const today = new Date().toISOString().split('T')[0];
+        const hasTodayData = processedData.completion_trend.some(
+          item => item.date === today
+        );
+        
+        if (!hasTodayData) {
+          console.debug('Adding today to completion trend');
+          // Adicionar dados de hoje no frontend caso o backend não tenha incluído
+          processedData.completion_trend.push({
+            date: today,
+            total: processedData.today.total,
+            completed: processedData.today.completed,
+            rate: processedData.today.total > 0 
+              ? (processedData.today.completed / processedData.today.total) * 100 
+              : 0
+          });
+        }
+      }
+      
+      // Ordenar por data para garantir exibição correta
+      processedData.completion_trend.sort((a, b) => 
+        new Date(a.date) - new Date(b.date)
+      );
       
       setDashboardData(processedData);
     } catch (error) {
@@ -334,11 +366,20 @@ export default function Dashboard() {
     return (
       <div className="space-y-3">
         {upcomingTasks.map(task => (
-          <div key={task.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border-l-4" 
+          <div key={`${task.id}-${task.date}`} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border-l-4" 
                style={{ borderLeftColor: task.category_color || '#8b5cf6' }}>
             <div className="flex justify-between items-start">
               <div>
-                <h3 className="text-md font-medium text-gray-900 dark:text-white">{task.title}</h3>
+                <h3 className="text-md font-medium text-gray-900 dark:text-white">
+                  {task.title}
+                  {TaskService.isRecurringTask(task) && (
+                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-0.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      </svg>
+                    </span>
+                  )}
+                </h3>
                 <div className="mt-1 flex items-center text-sm text-gray-500 dark:text-gray-400">
                   <ClockIcon className="flex-shrink-0 mr-1.5 h-4 w-4" />
                   <span>{formatTime(task.start_time)} - {formatTime(task.end_time)}</span>
@@ -449,10 +490,10 @@ export default function Dashboard() {
             
             {renderStatCard(
               'Taxa de Conclusão (Semana)',
-              `${Math.round(dashboardData.week.completion_rate)}%`,
+              `${Math.round(dashboardData.week.completion_rate || 0)}%`,
               <ChartBarIcon className="h-6 w-6 text-green-600 dark:text-green-400" />,
               'bg-green-100 dark:bg-green-900',
-              `${dashboardData.week.completed} de ${dashboardData.week.total} tarefas`
+              `${dashboardData.week.completed || 0} de ${dashboardData.week.total || 0} tarefas`
             )}
             
             {renderStatCard(

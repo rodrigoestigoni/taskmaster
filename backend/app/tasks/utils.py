@@ -210,7 +210,7 @@ def count_total_tasks(user, date=None, date_range=None):
         date_range: Tupla (data_inicio, data_fim) para contar (opcional)
         
     Returns:
-        dict: Contagens por status e total
+        dict: Contagens por status e total, incluindo high_priority
     """
     from .models import Task, TaskOccurrence
     from django.utils import timezone
@@ -222,7 +222,8 @@ def count_total_tasks(user, date=None, date_range=None):
         'completed': 0,
         'in_progress': 0,
         'pending': 0,
-        'failed': 0
+        'failed': 0,
+        'high_priority': 0  # Adicionar contador para tarefas de alta prioridade
     }
     
     # Base query para todas as tarefas do usuário
@@ -241,6 +242,7 @@ def count_total_tasks(user, date=None, date_range=None):
     else:
         # Se nenhuma data for especificada, use a data atual
         today = timezone.localdate()
+        print(f"[DEBUG] Contando tarefas para a data: {today}")
         non_recurring_query = base_query.filter(repeat_pattern='none', date=today)
     
     # Adicionar contagens não recorrentes
@@ -249,6 +251,9 @@ def count_total_tasks(user, date=None, date_range=None):
     counts['in_progress'] += non_recurring_query.filter(status='in_progress').count()
     counts['pending'] += non_recurring_query.filter(status='pending').count()
     counts['failed'] += non_recurring_query.filter(status='failed').count()
+    
+    # Contar tarefas de alta prioridade (prioridade = 3 ou 4)
+    counts['high_priority'] += non_recurring_query.filter(priority__gte=3).count()
     
     # Para tarefas recorrentes, precisamos considerar qualquer tarefa que possa se aplicar à data
     if date:
@@ -264,9 +269,11 @@ def count_total_tasks(user, date=None, date_range=None):
         recurring_tasks = base_query.exclude(repeat_pattern='none').filter(date__lte=today)
     
     # Para cada tarefa recorrente
+    print(f"[DEBUG] Verificando {len(recurring_tasks)} tarefas recorrentes")
     for task in recurring_tasks:
         if date:
             dates_to_check = [date]
+            print(f"[DEBUG] Verificando data específica: {date} para tarefa {task.id}")
         elif date_range:
             # Gerar todas as datas no intervalo
             dates_to_check = []
@@ -274,9 +281,12 @@ def count_total_tasks(user, date=None, date_range=None):
             while current_date <= date_range[1]:
                 dates_to_check.append(current_date)
                 current_date += timedelta(days=1)
+            print(f"[DEBUG] Verificando intervalo de {len(dates_to_check)} dias para tarefa {task.id}")
         else:
             # Se nenhuma data for especificada, use a data atual
-            dates_to_check = [timezone.localdate()]
+            today_date = timezone.localdate()
+            dates_to_check = [today_date]
+            print(f"[DEBUG] Verificando hoje {today_date} para tarefa {task.id}")
         
         # Para cada data, verificar se a tarefa se aplica
         for check_date in dates_to_check:
@@ -310,14 +320,31 @@ def count_total_tasks(user, date=None, date_range=None):
             
             # Se a tarefa se aplica a esta data, adicionar à contagem
             if applies:
+                print(f"[DEBUG] Tarefa {task.id} ({task.title}) se aplica a data {check_date} - padrão: {task.repeat_pattern}")
                 try:
                     occurrence = TaskOccurrence.objects.get(task=task, date=check_date)
+                    print(f"[DEBUG] Encontrou ocorrência - status: {occurrence.status}")
                     if occurrence.status != 'skipped':
                         counts['total'] += 1
                         counts[occurrence.status] += 1
+                        
+                        # Contabilizar alta prioridade (3=Alta, 4=Urgente)
+                        if task.priority >= 3:
+                            counts['high_priority'] += 1
                 except TaskOccurrence.DoesNotExist:
+                    print(f"[DEBUG] Ocorrência não encontrada - adicionando como pendente")
                     counts['total'] += 1
                     counts['pending'] += 1
+                    
+                    # Contabilizar alta prioridade (3=Alta, 4=Urgente)
+                    if task.priority >= 3:
+                        counts['high_priority'] += 1
+    
+    # Adicionar a taxa de conclusão para facilitar acesso pelo frontend
+    if counts['total'] > 0:
+        counts['completion_rate'] = (counts['completed'] / counts['total']) * 100
+    else:
+        counts['completion_rate'] = 0
     
     return counts
 
