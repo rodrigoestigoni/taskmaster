@@ -69,12 +69,26 @@ class Goal(models.Model):
     def update_progress(self):
         """Atualiza o progresso percentual com base no valor atual e alvo"""
         if self.target_value > 0:
-            self.progress_percentage = (self.current_value / self.target_value) * 100
-            self.progress_percentage = round(self.progress_percentage, 2)  # Arredondar para 2 casas decimais
-            if self.progress_percentage >= 100:
-                self.is_completed = True
-                self.progress_percentage = 100
-        self.save(update_fields=['progress_percentage', 'is_completed'])
+            # Converter current_value para Decimal antes da divisão
+            from decimal import Decimal
+            try:
+                # Primeiro tenta converter diretamente
+                if isinstance(self.current_value, (int, float)):
+                    decimal_current = Decimal(str(self.current_value))
+                else:
+                    decimal_current = self.current_value
+                    
+                self.progress_percentage = (decimal_current / self.target_value) * 100
+                self.progress_percentage = round(self.progress_percentage, 2)
+                if self.progress_percentage >= 100:
+                    self.is_completed = True
+                    self.progress_percentage = 100
+            except Exception as e:
+                print(f"Erro ao calcular progresso: {e}")
+                # Fallback seguro
+                self.progress_percentage = 0
+                
+        self.save(update_fields=['progress_percentage', 'is_completed', 'current_value'])
 
 
 class Task(models.Model):
@@ -146,6 +160,10 @@ class Task(models.Model):
     def save(self, *args, **kwargs):
         # Check if this is an existing task being updated
         is_new = self.pk is None
+
+        # Adicionar logs detalhados
+        print(f"[TASK DEBUG] Task save started: id={self.pk}, status={self.status}, actual_value={self.actual_value}")
+        print(f"[TASK DEBUG] Related goal: {self.goal.id if self.goal else 'None'}")
         
         # If updating an existing task
         if not is_new:
@@ -155,6 +173,8 @@ class Task(models.Model):
                 old_status = old_task.status
                 old_actual_value = old_task.actual_value or 0
                 old_goal = old_task.goal
+
+                print(f"[TASK DEBUG] Old values: status={old_status}, actual_value={old_actual_value}, goal={old_goal.id if old_goal else 'None'}")
                 
                 # Calculate duration automatically if not provided
                 if not self.duration_minutes and self.start_time and self.end_time:
@@ -244,6 +264,8 @@ class Task(models.Model):
                     self.goal.current_value += self.actual_value
                     self.goal.update_progress()
                     print(f"[TASK MODEL] New task already completed: {self.actual_value} added to goal {self.goal.id}")
+            except Exception as e:
+                print(f"[TASK DEBUG] Exception in save: {e}")
         else:
             # New task - calculate duration and save
             if not self.duration_minutes and self.start_time and self.end_time:

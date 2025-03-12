@@ -145,6 +145,14 @@ const TaskForm = () => {
     title: Yup.string().required('Título é obrigatório'),
     category: Yup.number().required('Categoria é obrigatória'),
     date: Yup.date().required('Data é obrigatória'),
+    target_value: Yup.number()
+    .when('goal', {
+      is: (value) => value, // Se o campo 'goal' tiver um valor
+      then: Yup.number()
+        .required('O valor alvo é obrigatório quando vinculado a uma meta')
+        .min(0, 'O valor deve ser maior ou igual a zero'),
+      otherwise: Yup.number().nullable()
+    }),
     start_time: Yup.string().required('Hora de início é obrigatória'),
     end_time: Yup.string()
       .required('Hora de término é obrigatória')
@@ -582,17 +590,18 @@ const TaskForm = () => {
               </div>
               
               <div>
-                {renderLabel("target_value", "Valor Alvo (opcional)", <BookmarkIcon className="w-4 h-4" />)}
+                {renderLabel("target_value", "Valor Alvo", <BookmarkIcon className="w-4 h-4" />)}
                 <Field
                   id="target_value"
                   name="target_value"
                   type="number"
                   step="0.01"
+                  required={true}
                   className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 text-sm"
                   placeholder="Ex: 30 para 30 minutos"
                 />
                 <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Valor planejado para esta tarefa
+                  Valor planejado para esta tarefa (obrigatório para metas)
                 </div>
                 <ErrorMessage name="target_value" component="div" className="mt-1 text-xs text-red-600 dark:text-red-400" />
               </div>

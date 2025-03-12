@@ -213,47 +213,61 @@ const TaskService = {
     },
     
     /**
-     * Atualizar status de tarefa
-     * @param {number} id - ID da tarefa
-     * @param {Object} statusData - Dados do status (status, date, actual_value, notes)
-     * @returns {Promise} - Promessa com os dados atualizados
-     */
-    updateTaskStatus: async (id, statusData) => {
-      console.log(`TaskService.updateTaskStatus iniciado: id=${id}`, statusData);
-      
-      // Garantir que temos um objeto statusData válido
-      let data = statusData;
-      
-      // Se o statusData for uma string, converte para objeto
-      if (typeof statusData === 'string') {
-        console.log('Convertendo string para objeto:', statusData);
-        data = { status: statusData };
+   * Atualizar status de tarefa
+   * @param {number} id - ID da tarefa
+   * @param {Object} statusData - Dados do status (status, date, actual_value, notes)
+   * @returns {Promise} - Promessa com os dados atualizados
+   */
+  updateTaskStatus: async (id, statusData) => {
+    console.log(`TaskService.updateTaskStatus iniciado: id=${id}`, statusData);
+    
+    // Garantir que temos um objeto statusData válido
+    let data = statusData;
+    
+    // Se o statusData for uma string, converte para objeto
+    if (typeof statusData === 'string') {
+      console.log('Convertendo string para objeto:', statusData);
+      data = { status: statusData };
+    }
+    // Se não for um objeto, cria um objeto
+    else if (!statusData || typeof statusData !== 'object') {
+      console.error('Dados de status inválidos:', statusData);
+      throw new Error('Dados de status inválidos');
+    }
+    
+    // Verificar se o status está presente
+    if (data.status === undefined) {
+      console.error('Status não definido nos dados:', data);
+      throw new Error('Status não definido nos dados');
+    }
+    
+    // Garantir que actual_value seja um número se estiver presente
+    if (data.actual_value !== undefined) {
+      // Converter para número se for string
+      if (typeof data.actual_value === 'string') {
+        data.actual_value = Number(data.actual_value);
+        
+        // Verificar se é um número válido
+        if (isNaN(data.actual_value)) {
+          console.error('Valor inválido fornecido:', statusData.actual_value);
+          throw new Error('Valor inválido. Por favor, forneça um número.');
+        }
       }
-      // Se não for um objeto, cria um objeto
-      else if (!statusData || typeof statusData !== 'object') {
-        console.error('Dados de status inválidos:', statusData);
-        throw new Error('Dados de status inválidos');
-      }
-      
-      // Verificar se o status está presente
-      if (data.status === undefined) {
-        console.error('Status não definido nos dados:', data);
-        throw new Error('Status não definido nos dados');
-      }
-      
-      // Log detalhado
-      console.log(`Chamando API para atualizar status: id=${id}, status=${data.status}`, data);
-      
-      try {
-        // Chamar a API com dados explícitos
-        const response = await apiClient.post(`/tasks/${id}/update_status/`, data);
-        console.log('API respondeu com sucesso:', response.data);
-        return response;
-      } catch (error) {
-        console.error('Erro na chamada de API updateTaskStatus:', error);
-        throw error;
-      }
-    },
+    }
+    
+    // Log detalhado
+    console.log(`Chamando API para atualizar status: id=${id}, status=${data.status}, valor=${data.actual_value}`, data);
+    
+    try {
+      // Chamar a API com dados explícitos
+      const response = await apiClient.post(`/tasks/${id}/update_status/`, data);
+      console.log('API respondeu com sucesso:', response.data);
+      return response;
+    } catch (error) {
+      console.error('Erro na chamada de API updateTaskStatus:', error);
+      throw error;
+    }
+  },
     
     /**
      * Marcar tarefa como concluída

@@ -13,6 +13,7 @@ import {
   UserCircleIcon,
   MoonIcon,
   SunIcon,
+  BoltIcon,
   ComputerDesktopIcon,
   BellIcon,
   CalendarDaysIcon,
@@ -27,6 +28,7 @@ const navigation = [
   { name: 'Semana', href: '/week', icon: CalendarIcon },
   { name: 'Mês', href: '/month', icon: CalendarDaysIcon },
   { name: 'Metas', href: '/goals', icon: FlagIcon },
+  { name: 'Energia', href: '/energy', icon: BoltIcon }, // Adicione esta linha
   { name: 'Relatórios', href: '/reports', icon: ChartBarIcon },
   { name: 'Configurações', href: '/settings', icon: Cog6ToothIcon },
 ];

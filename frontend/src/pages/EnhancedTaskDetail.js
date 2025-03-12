@@ -101,14 +101,16 @@ const EnhancedTaskDetail = () => {
   
   // Pomodoro session complete handler
   const handlePomodoroComplete = async (taskId) => {
-    // If the task is already completed, do nothing
+    // Se a tarefa já estiver completa, não faça nada
     if (task.status === 'completed') return;
     
-    // Ask user if they want to mark as completed
-    const shouldComplete = window.confirm("Sessão Pomodoro concluída! Deseja marcar esta tarefa como concluída?");
-    
-    if (shouldComplete) {
+    try {
+      // Chamar a API para atualizar o status da tarefa
       await handleStatusChange(taskId, 'completed');
+      toast.success('Pomodoro concluído! Tarefa marcada como completa.');
+    } catch (error) {
+      console.error('Error completing task after Pomodoro:', error);
+      toast.error('Erro ao atualizar status da tarefa');
     }
   };
   

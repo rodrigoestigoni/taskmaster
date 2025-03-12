@@ -20,6 +20,7 @@ import TaskService from '../services/TaskService';
 import TaskStatusBadge from '../components/tasks/TaskStatusBadge';
 import TaskPriorityBadge from '../components/tasks/TaskPriorityBadge';
 import EnergyRecommendations from '../components/energy/EnergyRecommendations';
+import VisualGoalProgress from '../components/common/VisualGoalProgress';
 import EmptyState from '../components/common/EmptyState';
 
 // Registrar componentes do Chart.js

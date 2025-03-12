@@ -18,6 +18,7 @@ import { toast } from 'react-toastify';
 import TaskService from '../services/TaskService';
 import TaskStatusBadge from '../components/tasks/TaskStatusBadge';
 import EmptyState from '../components/common/EmptyState';
+import VisualGoalProgress from '../components/common/VisualGoalProgress';
 
 export default function Goals() {
   const [goals, setGoals] = useState([]);
@@ -229,13 +230,8 @@ export default function Goals() {
               </div>
             </div>
             
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-              <div 
-                className={`${
-                  goal.is_completed ? 'bg-green-600' : 'bg-primary-600'
-                } h-2.5 rounded-full`} 
-                style={{ width: `${Math.min((goal.current_value / goal.target_value) * 100, 100)}%` }}
-              ></div>
+            <div className="mt-3">
+              <VisualGoalProgress goal={goal} />
             </div>
           </div>
           

@@ -37,9 +37,19 @@ const VisualGoalProgress = ({ goal }) => {
     // Calculate days elapsed and days remaining
     const totalDays = diffDays(endDate, startDate);
     const daysElapsed = diffDays(today, startDate);
+    const daysRemaining = diffDays(endDate, today);
     
     if (daysElapsed <= 0 || totalDays <= 0) {
       setProjection(null);
+      return;
+    }
+    
+    // If current value is 0, show different message
+    if (goal.current_value <= 0) {
+      setProjection({
+        status: 'not_started',
+        daysRemaining: daysRemaining
+      });
       return;
     }
     
@@ -170,25 +180,33 @@ const VisualGoalProgress = ({ goal }) => {
             </h4>
             
             <div className="flex flex-col space-y-1 text-sm">
-              <div className={`${
-                projection.status === 'ahead' 
-                  ? 'text-green-600 dark:text-green-400' 
-                  : 'text-red-600 dark:text-red-400'
-              }`}>
-                Você está {projection.status === 'ahead' ? 'adiantado' : 'atrasado'} em relação ao cronograma.
-              </div>
-              
-              <div className="text-gray-600 dark:text-gray-300">
-                No ritmo atual, você completará esta meta em {projection.daysToCompletion} dias.
-                {projection.date && (
-                  <span className="font-medium"> ({formatDate(projection.date)})</span>
-                )}
-              </div>
-              
-              {projection.date > new Date(goal.end_date) && (
-                <div className="text-red-600 dark:text-red-400 font-medium">
-                  Isso é depois do prazo final! Você precisará aumentar seu ritmo.
+              {projection.status === 'not_started' ? (
+                <div className="text-gray-600 dark:text-gray-300">
+                  Sem progresso registrado ainda. Você tem {projection.daysRemaining} dias para completar esta meta.
                 </div>
+              ) : (
+                <>
+                  <div className={`${
+                    projection.status === 'ahead' 
+                      ? 'text-green-600 dark:text-green-400' 
+                      : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    Você está {projection.status === 'ahead' ? 'adiantado' : 'atrasado'} em relação ao cronograma.
+                  </div>
+                  
+                  <div className="text-gray-600 dark:text-gray-300">
+                    No ritmo atual, você completará esta meta em {projection.daysToCompletion} dias.
+                    {projection.date && (
+                      <span className="font-medium"> ({formatDate(projection.date)})</span>
+                    )}
+                  </div>
+                  
+                  {projection.date > new Date(goal.end_date) && (
+                    <div className="text-red-600 dark:text-red-400 font-medium">
+                      Isso é depois do prazo final! Você precisará aumentar seu ritmo.
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

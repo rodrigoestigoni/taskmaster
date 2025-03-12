@@ -1042,12 +1042,16 @@ class TaskViewSet(viewsets.ModelViewSet):
     def update_status(self, request, pk=None):
         """Atualizar status da tarefa"""
         from django.db import transaction
+        from decimal import Decimal
         
         with transaction.atomic():
             task = self.get_object()
             status_value = request.data.get('status')
             notes = request.data.get('notes')
-            actual_value = request.data.get('actual_value')
+            if request.data.get('actual_value'):
+                actual_value = Decimal(request.data.get('actual_value'))
+            else:
+                actual_value = None
             
             print(f"[DEBUG] Atualizando status da tarefa {task.id} para {status_value}")
             print(f"[DEBUG] Valor recebido: {actual_value}, Tipo: {type(actual_value)}")

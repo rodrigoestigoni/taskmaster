@@ -59,7 +59,7 @@ function App() {
                     <Route path="/month" element={<MonthView />} />
                     <Route path="/task/new" element={<TaskForm />} />
                     <Route path="/task/edit/:id" element={<TaskForm />} />
-                    <Route path="/enhanced_task" element={<EnhancedTaskDetail />} />
+                    <Route path="/enhanced_task/:id" element={<EnhancedTaskDetail />} />
                     <Route path="/energy" element={<EnergyProfilePage />} />
                     <Route path="/goals" element={<Goals />} />
                     <Route path="/goal/new" element={<GoalForm />} />

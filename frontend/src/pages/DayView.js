@@ -11,6 +11,8 @@ import {
   FaceFrownIcon,
   HandThumbDownIcon,
   XMarkIcon,
+  DocumentTextIcon,
+  ClockIcon,
   PauseIcon,
   PlayIcon,
   PencilIcon,
@@ -27,11 +29,13 @@ import TaskStatusBadge from '../components/tasks/TaskStatusBadge';
 import TaskPriorityBadge from '../components/tasks/TaskPriorityBadge';
 import EmptyState from '../components/common/EmptyState';
 import DeleteTaskModal from '../components/common/DeleteTaskModal';
+import TimeBlockingScheduler from '../components/common/TimeBlockingScheduler';
 
 export default function DayView() {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const dateParam = queryParams.get('date');
+  const [showTimeBlocker, setShowTimeBlocker] = useState(false);
   
   const [selectedDate, setSelectedDate] = useState(
     dateParam ? parseISO(dateParam) : new Date()
@@ -327,6 +331,7 @@ export default function DayView() {
             style={{ backgroundColor: `${categoryColor}20`, color: categoryColor }}
           >
             {task.category_name}
+            {console.log(task)}
           </span>
           <TaskStatusBadge status={task.status} />
         </div>
@@ -336,7 +341,23 @@ export default function DayView() {
             {isToday && !isCompleted ? (
               <>
                 <button
-                  onClick={() => handleStatusChange(task.id, 'completed')}
+                  onClick={() => {
+                    // Usa o target_value da tarefa diretamente
+                    if (task.goal) {
+                      // Verificar se target_value existe
+                      if (task.target_value) {
+                        // Converter para número para garantir o tipo correto
+                        const numValue = task.target_value;
+                        // Chamar handleStatusChange com o target_value como actual_value
+                        handleStatusChange(task.id, 'completed', numValue);
+                      } else {
+                        toast.error('Erro: Tarefa não possui valor alvo definido');
+                      }
+                    } else {
+                      // Se não tiver meta, chama normalmente
+                      handleStatusChange(task.id, 'completed');
+                    }
+                  }}
                   className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                   title="Marcar como concluída"
                 >
@@ -380,12 +401,25 @@ export default function DayView() {
             </Link>
             
             <button
-              onClick={() => handleDeleteTask(task.id)}
-              className="inline-flex items-center p-1 border border-red-300 dark:border-gray-600 rounded-full shadow-sm text-red-700 dark:text-red-300 bg-white dark:bg-red-700 hover:bg-red-50 dark:hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              onClick={(e) => {
+                e.stopPropagation(); // Evita propagação do evento
+                handleDeleteTask(task.id);
+              }}
+              className="delete-button inline-flex items-center p-1 border border-red-300 dark:border-gray-600 rounded-full shadow-sm text-red-700 dark:text-red-300 bg-white dark:bg-red-700 hover:bg-red-50 dark:hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
               title="Excluir tarefa"
+              aria-label="Excluir tarefa"
+              type="button"
             >
               <TrashIcon className="h-4 w-4" aria-hidden="true" />
             </button>
+
+            <Link
+              to={`/enhanced_task/${task.id}`}
+              className="inline-flex items-center px-2 py-1 text-xs font-medium text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+            >
+              <DocumentTextIcon className="h-3 w-3 mr-1" />
+              Detalhes
+            </Link>
           </div>
         </div>
         <DeleteTaskModal
@@ -546,6 +580,13 @@ export default function DayView() {
             <PlusIcon className="h-4 w-4 mr-1" />
             <span>Nova Tarefa</span>
           </Link>
+          <button
+              onClick={() => setShowTimeBlocker(!showTimeBlocker)}
+              className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            >
+              <ClockIcon className="h-4 w-4 mr-1" />
+              <span>{showTimeBlocker ? 'Ocultar Agenda' : 'Planejador'}</span>
+            </button>
         </div>
       </div>
       
@@ -607,6 +648,34 @@ export default function DayView() {
               </svg>
             </span>
           )}
+        </div>
+      )}
+      {showTimeBlocker && (
+        <div className="mt-4 mb-6">
+          <TimeBlockingScheduler
+            tasks={tasks}
+            onScheduleTask={async (taskId, startTime, endTime) => {
+              try {
+                const task = tasks.find(t => t.id === taskId);
+                if (!task) return;
+                
+                await TaskService.updateTask(taskId, {
+                  ...task,
+                  start_time: startTime,
+                  end_time: endTime
+                });
+                
+                toast.success('Tarefa agendada com sucesso!');
+                fetchTasks(); // Recarregar tarefas
+              } catch (error) {
+                console.error('Error scheduling task:', error);
+                toast.error('Erro ao agendar tarefa');
+              }
+            }}
+            onDetectConflict={(task, conflict) => {
+              toast.warning(`Conflito detectado com a tarefa "${conflict.title}"`);
+            }}
+          />
         </div>
       )}
     </div>
