@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from django.db.models import Q, Sum, Count, Case, When, IntegerField, F
 from django.utils import timezone
 
-from .utils import check_task_overlap
+from .utils import check_task_overlap, count_tasks_with_recurrences, count_total_tasks
 from .services import EnergyMatchService
 from .models import Task, Category, Goal, TaskOccurrence, UserPreference
 from .serializers import (
@@ -72,42 +72,108 @@ class GoalViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def report(self, request):
-        """Gera relatório de progresso das metas"""
+        """Gera relatório de progresso das tarefas"""
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
         
-        queryset = self.get_queryset()
+        # Converter para objetos de data
+        start_date_obj = None
+        end_date_obj = None
         
         if start_date:
-            queryset = queryset.filter(start_date__gte=start_date)
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
         if end_date:
-            queryset = queryset.filter(end_date__lte=end_date)
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+        
+        # Usar a função utilitária para contar tarefas no período
+        if start_date_obj and end_date_obj:
+            counts = count_tasks_with_recurrences(
+                request.user,
+                date_range=(start_date_obj, end_date_obj)
+            )
+        else:
+            # Se não houver período especificado, usar os últimos 30 dias
+            end_date_obj = timezone.localdate()
+            start_date_obj = end_date_obj - timedelta(days=30)
+            counts = count_tasks_with_recurrences(
+                request.user,
+                date_range=(start_date_obj, end_date_obj)
+            )
+        
+        # Formatar os dados para o serializer
+        
+        # 1. Status
+        status_data = []
+        for status, count in counts['by_status'].items():
+            if counts['total'] > 0:
+                percentage = (count / counts['total']) * 100
+            else:
+                percentage = 0
             
-        # Agrupar por categoria
-        category_data = queryset.values('category__name').annotate(
-            total=Count('id'),
-            completed=Sum(Case(When(is_completed=True, then=1), default=0, output_field=IntegerField())),
-            in_progress=Sum(Case(When(is_completed=False, then=1), default=0, output_field=IntegerField())),
-            avg_progress=Sum(F('progress_percentage')) / Count('id')
-        )
+            status_data.append({
+                'status': status,
+                'count': count,
+                'percentage': percentage
+            })
         
-        # Agrupar por período
-        period_data = queryset.values('period').annotate(
-            total=Count('id'),
-            completed=Sum(Case(When(is_completed=True, then=1), default=0, output_field=IntegerField())),
-            avg_progress=Sum(F('progress_percentage')) / Count('id')
-        )
+        # 2. Categorias
+        category_data = []
+        for category_id, category_counts in counts['by_category'].items():
+            try:
+                category = Category.objects.get(id=category_id)
+                category_name = category.name
+                category_color = category.color
+            except Category.DoesNotExist:
+                category_name = "Desconhecida"
+                category_color = "#CCCCCC"
+            
+            category_data.append({
+                'category__name': category_name,
+                'category__color': category_color,
+                'count': category_counts['total'],
+                'completed': category_counts['completed'],
+                'pending': category_counts['pending'],
+                'failed': category_counts['failed'],
+                'percentage': (category_counts['total'] / counts['total'] * 100) 
+                            if counts['total'] > 0 else 0
+            })
         
-        serializer = GoalReportSerializer({
+        # 3. Contagens por dia
+        day_data = []
+        for date_str, day_counts in counts['by_day'].items():
+            day_data.append({
+                'date': datetime.strptime(date_str, '%Y-%m-%d').date(),
+                'total': day_counts['total'],
+                'completed': day_counts['completed'],
+                'completion_rate': (day_counts['completed'] / day_counts['total'] * 100)
+                                if day_counts['total'] > 0 else 0
+            })
+        
+        # Ordenar por data
+        day_data.sort(key=lambda x: x['date'])
+        
+        # Construir resposta
+        serializer = TaskReportSerializer({
+            'status': status_data,
             'categories': category_data,
-            'periods': period_data,
-            'total_goals': queryset.count(),
-            'completed_goals': queryset.filter(is_completed=True).count(),
-            'avg_progress': queryset.aggregate(avg=Sum(F('progress_percentage')) / Count('id'))['avg'] or 0,
+            'days': day_data,
+            'total_tasks': counts['total'],
+            'completed_tasks': counts['by_status']['completed'],
+            'completion_rate': (counts['by_status']['completed'] / counts['total'] * 100)
+                            if counts['total'] > 0 else 0,
         })
         
         return Response(serializer.data)
 
+def task_counts_by_day_formatter(by_day_dict):
+    for date_str, counts in by_day_dict.items():
+        yield {
+            'date': date_str,
+            'total': counts['total'],
+            'completed': counts['completed'],
+            'rate': (counts['completed'] / counts['total'] * 100) if counts['total'] > 0 else 0
+        }
+        
 def update_recurring_task(self, instance, request, mode, occurrence_date=None):
     """
     Atualiza uma tarefa recorrente com base no modo selecionado:
@@ -840,54 +906,43 @@ class TaskViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
         """Retorna dados consolidados para o dashboard"""
-        # Tarefas hoje
         today = timezone.localdate()
-        tasks_today = self.get_queryset().filter(date=today)
+        
+        # Usar a função utilitária para contar tarefas de hoje
+        today_counts = count_tasks_with_recurrences(request.user, date=today)
         
         # Tarefas da semana
         start_of_week = today - timedelta(days=today.weekday())
         end_of_week = start_of_week + timedelta(days=6)
-        tasks_week = self.get_queryset().filter(date__range=[start_of_week, end_of_week])
+        week_counts = count_tasks_with_recurrences(
+            request.user, 
+            date_range=(start_of_week, end_of_week)
+        )
         
         # Progresso das metas
         goals = Goal.objects.filter(user=request.user)
         active_goals = goals.filter(end_date__gte=today, is_completed=False)
         
-        # Estatísticas de conclusão
-        tasks_last_30_days = self.get_queryset().filter(
-            date__range=[today - timedelta(days=30), today]
-        )
+        # Formatando os dados para o serializer
+        today_stats = count_total_tasks(request.user, date=timezone.localdate())
+        week_stats = count_total_tasks(request.user, date_range=(start_of_week, end_of_week))
+        print(f"[DEBUG] today_stats: {today_stats}, week_stats: {week_stats}")
         
-        completion_by_day = tasks_last_30_days.values('date').annotate(
-            total=Count('id'),
-            completed=Sum(Case(When(status='completed', then=1), default=0, output_field=IntegerField())),
-            rate=Sum(Case(When(status='completed', then=1), default=0, output_field=IntegerField())) * 100.0 / Count('id')
-        ).order_by('date')
-        
+        # Gerar resposta
         serializer = DashboardSerializer({
-            'today': {
-                'total': tasks_today.count(),
-                'completed': tasks_today.filter(status='completed').count(),
-                'in_progress': tasks_today.filter(status='in_progress').count(),
-                'pending': tasks_today.filter(status='pending').count(),
-                'high_priority': tasks_today.filter(priority__gte=3).count(),
-            },
-            'week': {
-                'total': tasks_week.count(),
-                'completed': tasks_week.filter(status='completed').count(),
-                'completion_rate': tasks_week.filter(status='completed').count() * 100.0 / tasks_week.count() if tasks_week.count() > 0 else 0,
-            },
+            'today': today_stats,
+            'week': week_stats,
             'goals': {
                 'total': goals.count(),
                 'active': active_goals.count(),
                 'completed': goals.filter(is_completed=True).count(),
                 'close_to_deadline': active_goals.filter(end_date__lte=today + timedelta(days=7)).count(),
             },
-            'completion_trend': list(completion_by_day),
+            'completion_trend': list(task_counts_by_day_formatter(week_counts['by_day'])),
         })
         
         return Response(serializer.data)
-    
+
     @action(detail=True, methods=['get'])
     def occurrence(self, request, pk=None):
         """Retorna a ocorrência de uma tarefa para uma data específica"""

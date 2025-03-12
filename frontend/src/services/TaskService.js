@@ -68,6 +68,41 @@ const TaskService = {
     getTasks: async () => {
       return apiClient.get('/tasks/');
     },
+    countTodayTasks: async () => {
+      try {
+        // Primeiro obter tarefas do dia
+        const today = new Date();
+        const todayIsoStr = today.toISOString().split('T')[0];
+        const response = await apiClient.get(`/tasks/today/?date=${todayIsoStr}`);
+        
+        // Contar por status
+        const counts = {
+          total: response.data.length,
+          completed: 0,
+          in_progress: 0,
+          pending: 0, 
+          failed: 0
+        };
+        
+        // Somar status
+        response.data.forEach(task => {
+          if (task.status) {
+            counts[task.status] = (counts[task.status] || 0) + 1;
+          }
+        });
+        
+        return counts;
+      } catch (error) {
+        console.error('Error counting tasks:', error);
+        return {
+          total: 0,
+          completed: 0,
+          in_progress: 0,
+          pending: 0,
+          failed: 0
+        };
+      }
+    },
     
     /**
      * Buscar tarefas do dia atual

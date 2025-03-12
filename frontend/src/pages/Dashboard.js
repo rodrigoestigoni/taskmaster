@@ -41,10 +41,41 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       const response = await TaskService.getDashboard();
-      setDashboardData(response.data);
+      
+      // Garantir que os valores sejam pelo menos zero mesmo que estejam vazios
+      const ensureValue = (obj, key) => {
+        if (!obj || obj[key] === undefined || obj[key] === null) {
+          return 0;
+        }
+        return obj[key];
+      };
+      
+      const processedData = {
+        today: {
+          total: ensureValue(response.data?.today, 'total'),
+          completed: ensureValue(response.data?.today, 'completed'),
+          in_progress: ensureValue(response.data?.today, 'in_progress'),
+          pending: ensureValue(response.data?.today, 'pending'),
+          high_priority: ensureValue(response.data?.today, 'high_priority')
+        },
+        week: {
+          total: ensureValue(response.data?.week, 'total'),
+          completed: ensureValue(response.data?.week, 'completed'),
+          completion_rate: ensureValue(response.data?.week, 'completion_rate')
+        },
+        goals: {
+          total: ensureValue(response.data?.goals, 'total'),
+          active: ensureValue(response.data?.goals, 'active'),
+          completed: ensureValue(response.data?.goals, 'completed'),
+          close_to_deadline: ensureValue(response.data?.goals, 'close_to_deadline')
+        },
+        completion_trend: response.data?.completion_trend || []
+      };
+      
+      setDashboardData(processedData);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      // Em vez de mostrar toast de erro, apenas inicializa com dados vazios
+      // Inicializar com dados vazios
       setDashboardData({
         today: { total: 0, completed: 0, in_progress: 0, pending: 0, high_priority: 0 },
         week: { total: 0, completed: 0, completion_rate: 0 },
@@ -255,6 +286,9 @@ export default function Dashboard() {
   
   // Renderiza cartão de estatísticas
   const renderStatCard = (title, value, icon, color, description) => {
+    // Garantir que value é um número
+    const displayValue = typeof value === 'number' ? value : 0;
+    
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
         <div className="px-4 py-5 sm:p-6">
@@ -266,7 +300,7 @@ export default function Dashboard() {
               <dl>
                 <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{title}</dt>
                 <dd>
-                  <div className="text-lg font-medium text-gray-900 dark:text-white">{value}</div>
+                  <div className="text-lg font-medium text-gray-900 dark:text-white">{displayValue}</div>
                 </dd>
               </dl>
             </div>
