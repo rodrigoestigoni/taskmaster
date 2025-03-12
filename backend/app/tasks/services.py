@@ -73,21 +73,47 @@ class EnergyMatchService:
         """Retorna tarefas recomendadas com base no nível de energia atual"""
         current_energy = cls.get_current_energy_level(user)
         
-        # Buscar tarefas pendentes do usuário
+        # Buscar tarefas pendentes do usuário para hoje
+        today = datetime.now().date()
         pending_tasks = Task.objects.filter(
             user=user,
             status='pending',
-            date=datetime.now().date()
+            date=today
         )
+        
+        # Se não há tarefas pendentes, verificar se há tarefas sem energia definida
+        if pending_tasks.count() == 0:
+            # Check if there are tasks without energy level assigned
+            unassigned_tasks = Task.objects.filter(
+                user=user,
+                status='pending',
+                date=today,
+                energy_level__isnull=True
+            )
+            if unassigned_tasks.exists():
+                print(f"[DEBUG] User has {unassigned_tasks.count()} tasks without energy levels assigned.")
+            else:
+                print(f"[DEBUG] User has no pending tasks for today.")
+            return []
+            
+        # Log debugging info
+        print(f"[DEBUG] Found {pending_tasks.count()} pending tasks for user {user.username}")
         
         # Calcular pontuação para cada tarefa
         task_scores = []
         for task in pending_tasks:
+            # Defensive check for energy_level - ensure valid value
+            if not task.energy_level or task.energy_level not in ['high', 'medium', 'low']:
+                task.energy_level = 'medium'  # Default to medium energy if not set
+                
             score = cls.get_task_energy_match_score(task, current_energy)
             task_scores.append((task, score))
+            print(f"[DEBUG] Task {task.id} ({task.title}) has energy level {task.energy_level} and score {score}")
         
         # Ordenar por pontuação (maior primeiro)
         task_scores.sort(key=lambda x: x[1], reverse=True)
         
         # Retornar apenas as tarefas
-        return [task for task, score in task_scores[:limit]]
+        result = [task for task, score in task_scores[:limit]]
+        print(f"[DEBUG] Returning {len(result)} recommended tasks")
+        return result

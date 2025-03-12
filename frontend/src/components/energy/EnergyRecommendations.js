@@ -17,12 +17,38 @@ const EnergyRecommendations = () => {
     setLoading(true);
     setError(null);
     try {
+      // First check if the energy profile exists
+      try {
+        await TaskService.getEnergyProfile();
+      } catch (profileError) {
+        console.error('Energy profile not found:', profileError);
+        setError('Você precisa configurar seu perfil de energia primeiro.');
+        setRecommendations([]);
+        setLoading(false);
+        return;
+      }
+      
+      // Now get recommendations
       const response = await TaskService.getEnergyRecommendations();
-      setRecommendations(response.data.recommended_tasks || []);
-      setCurrentEnergy(response.data.current_energy_level || 5);
+      
+      // Check if we got data in the expected format
+      if (!response.data || !response.data.recommended_tasks) {
+        console.error('Malformed response from recommendations API:', response);
+        setError('Formato de resposta inválido das recomendações. Por favor, tente novamente.');
+        setRecommendations([]);
+        return;
+      }
+      
+      // Check if there are any recommendations
+      if (response.data.recommended_tasks.length === 0) {
+        setError('Não há tarefas disponíveis para recomendação. Certifique-se de ter tarefas pendentes hoje com níveis de energia definidos.');
+      } else {
+        setRecommendations(response.data.recommended_tasks);
+        setCurrentEnergy(response.data.current_energy_level || 5);
+      }
     } catch (error) {
       console.error('Error fetching energy recommendations:', error);
-      setError('Não foi possível carregar as recomendações. Verifique seu perfil de energia.');
+      setError('Erro ao buscar recomendações. Tente novamente mais tarde.');
       setRecommendations([]);
     } finally {
       setLoading(false);
@@ -137,7 +163,7 @@ const EnergyRecommendations = () => {
           {error}
           <div className="mt-2 flex">
             <Link 
-              to="/energy-profile" 
+              to="/energy" 
               className="text-red-800 dark:text-red-300 hover:underline font-medium text-xs"
             >
               Configurar perfil de energia
@@ -174,7 +200,7 @@ const EnergyRecommendations = () => {
         </button>
         
         <Link 
-          to="/energy-profile"
+          to="/energy"
           className="ml-2 flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
         >
           Editar perfil

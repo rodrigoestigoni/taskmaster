@@ -2,31 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import TaskService from '../services/TaskService';
 
-// Componente de perfil de energia
+// Componente de perfil de energia simplificado
 const EnergyProfilePage = () => {
-  // Estado para armazenar o perfil de energia
+  // Estado para armazenar o perfil de energia simplificado
   const [profile, setProfile] = useState({
-    // Períodos da manhã
-    early_morning_energy: 5,  // Início da manhã (5h-8h)
-    mid_morning_energy: 7,    // Meio da manhã (8h-11h)
-    late_morning_energy: 6,   // Final da manhã (11h-14h)
+    // Simplificado para apenas 3 períodos
+    morning_energy: 7,     // Manhã (5h-12h)
+    afternoon_energy: 5,   // Tarde (12h-18h)
+    evening_energy: 3,     // Noite/Madrugada (18h-5h)
     
-    // Períodos da tarde
-    early_afternoon_energy: 5, // Início da tarde (14h-17h)
-    late_afternoon_energy: 4,  // Final da tarde (17h-20h)
-    
-    // Período da noite
-    evening_energy: 3,        // Noite (20h-23h)
-    night_energy: 2,          // Madrugada (23h-5h)
-    
-    // Dias da semana - valores entre -2 e +2 para modificar a energia
+    // Simplificado para apenas dias úteis e finais de semana
+    weekday_modifier: 0,   // Segunda a Sexta
+    weekend_modifier: 1,   // Sábado e Domingo
+  });
+  
+  // Estado para o perfil completo (para compatibilidade com a API)
+  const [fullProfile, setFullProfile] = useState({
+    early_morning_energy: 5,
+    mid_morning_energy: 7,
+    late_morning_energy: 6,
+    early_afternoon_energy: 5,
+    late_afternoon_energy: 4,
+    evening_energy: 3,
+    night_energy: 2,
     monday_modifier: 0,
     tuesday_modifier: 0,
     wednesday_modifier: 0,
     thursday_modifier: 0,
-    friday_modifier: -1,
+    friday_modifier: 0,
     saturday_modifier: 1,
-    sunday_modifier: 0
+    sunday_modifier: 1
   });
   
   const [loading, setLoading] = useState(true);
@@ -38,7 +43,7 @@ const EnergyProfilePage = () => {
     const hasSeenEnergyIntro = localStorage.getItem('hasSeenEnergyIntro');
     if (!hasSeenEnergyIntro) {
       toast.info(
-        "👋 Bem-vindo ao gerenciamento de energia! Configure seu perfil de energia para receber recomendações personalizadas de tarefas com base nos seus níveis de energia ao longo do dia.", 
+        "👋 Configure seu perfil de energia para receber recomendações de tarefas com base nos seus níveis de energia ao longo do dia.", 
         { autoClose: 8000 }
       );
       localStorage.setItem('hasSeenEnergyIntro', 'true');
@@ -51,7 +56,42 @@ const EnergyProfilePage = () => {
       setLoading(true);
       const response = await TaskService.getEnergyProfile();
       if (response.data) {
-        setProfile(response.data);
+        // Guardar o perfil completo para envio posterior
+        setFullProfile(response.data);
+        
+        // Simplificar para a interface do usuário
+        const simplifiedProfile = {
+          // Média dos valores da manhã
+          morning_energy: Math.round((
+            response.data.early_morning_energy + 
+            response.data.mid_morning_energy + 
+            response.data.late_morning_energy) / 3),
+          
+          // Média dos valores da tarde
+          afternoon_energy: Math.round((
+            response.data.early_afternoon_energy + 
+            response.data.late_afternoon_energy) / 2),
+          
+          // Média dos valores da noite
+          evening_energy: Math.round((
+            response.data.evening_energy + 
+            response.data.night_energy) / 2),
+          
+          // Média dos modificadores de dias úteis
+          weekday_modifier: Math.round((
+            response.data.monday_modifier + 
+            response.data.tuesday_modifier + 
+            response.data.wednesday_modifier + 
+            response.data.thursday_modifier + 
+            response.data.friday_modifier) / 5),
+          
+          // Média dos modificadores de fim de semana
+          weekend_modifier: Math.round((
+            response.data.saturday_modifier + 
+            response.data.sunday_modifier) / 2)
+        };
+        
+        setProfile(simplifiedProfile);
       }
     } catch (error) {
       console.error('Erro ao carregar perfil de energia:', error);
@@ -61,7 +101,7 @@ const EnergyProfilePage = () => {
     }
   };
 
-  // Função para atualizar valores do perfil
+  // Função para atualizar valores do perfil simplificado
   const handleChange = (key, value) => {
     setProfile(prev => ({ 
       ...prev, 
@@ -73,8 +113,31 @@ const EnergyProfilePage = () => {
   const handleSaveProfile = async () => {
     try {
       setLoading(true);
-      await TaskService.saveEnergyProfile(profile);
+      
+      // Atualizar o perfil completo com os valores simplificados
+      const updatedFullProfile = {
+        ...fullProfile,
+        early_morning_energy: profile.morning_energy,
+        mid_morning_energy: profile.morning_energy,
+        late_morning_energy: profile.morning_energy,
+        early_afternoon_energy: profile.afternoon_energy,
+        late_afternoon_energy: profile.afternoon_energy,
+        evening_energy: profile.evening_energy,
+        night_energy: profile.evening_energy,
+        monday_modifier: profile.weekday_modifier,
+        tuesday_modifier: profile.weekday_modifier,
+        wednesday_modifier: profile.weekday_modifier,
+        thursday_modifier: profile.weekday_modifier,
+        friday_modifier: profile.weekday_modifier,
+        saturday_modifier: profile.weekend_modifier,
+        sunday_modifier: profile.weekend_modifier
+      };
+      
+      await TaskService.saveEnergyProfile(updatedFullProfile);
       toast.success('Perfil de energia salvo com sucesso!');
+      
+      // Atualizar o perfil completo em cache
+      setFullProfile(updatedFullProfile);
     } catch (error) {
       console.error('Erro ao salvar perfil de energia:', error);
       toast.error('Erro ao salvar o perfil de energia');
@@ -159,40 +222,38 @@ const EnergyProfilePage = () => {
     );
   };
 
-  // Componente para o novo seletor do dia da semana
-  const WeekdayModifierNew = ({ day, value, onChange }) => {
-    const dayNames = {
-      'monday_modifier': 'Segunda',
-      'tuesday_modifier': 'Terça',
-      'wednesday_modifier': 'Quarta',
-      'thursday_modifier': 'Quinta',
-      'friday_modifier': 'Sexta',
-      'saturday_modifier': 'Sábado',
-      'sunday_modifier': 'Domingo'
+  // Componente simplificado para modificador de energia por dia
+  const DayModifier = ({ type, value, onChange }) => {
+    const labels = {
+      'weekday_modifier': 'Dias úteis (Seg-Sex)',
+      'weekend_modifier': 'Finais de semana (Sáb-Dom)'
     };
     
     return (
-      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 flex flex-col items-center">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{dayNames[day]}</span>
+      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 flex flex-col">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{labels[type]}</span>
         <div className="flex items-center">
           <button
-            onClick={() => onChange(day, Math.max(-2, profile[day] - 1))}
-            className="w-8 h-8 flex items-center justify-center rounded-l-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300"
+            onClick={() => onChange(type, Math.max(-2, value - 1))}
+            className="w-10 h-10 flex items-center justify-center rounded-l-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-lg"
             disabled={loading}
           >
             -
           </button>
-          <div className="w-10 h-8 flex items-center justify-center bg-white dark:bg-gray-800 border-t border-b border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300">
-            {profile[day] > 0 ? `+${profile[day]}` : profile[day]}
+          <div className="w-14 h-10 flex items-center justify-center bg-white dark:bg-gray-800 border-t border-b border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium">
+            {value > 0 ? `+${value}` : value}
           </div>
           <button
-            onClick={() => onChange(day, Math.min(2, profile[day] + 1))}
-            className="w-8 h-8 flex items-center justify-center rounded-r-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300"
+            onClick={() => onChange(type, Math.min(2, value + 1))}
+            className="w-10 h-10 flex items-center justify-center rounded-r-md bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-lg"
             disabled={loading}
           >
             +
           </button>
         </div>
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          {value > 0 ? 'Mais energia nestes dias' : value < 0 ? 'Menos energia nestes dias' : 'Energia normal'}
+        </p>
       </div>
     );
   };
@@ -207,7 +268,7 @@ const EnergyProfilePage = () => {
           Seu Perfil de Energia
         </h2>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Configure seu padrão de energia para otimizar suas tarefas ao longo do dia.
+          Configure seu padrão de energia para receber recomendações de tarefas personalizadas.
         </p>
       </div>
       
@@ -216,123 +277,64 @@ const EnergyProfilePage = () => {
           <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
           <div className="h-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
           <div className="h-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          <div className="h-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
         </div>
       ) : (
         <>
-          {/* Níveis de energia do dia - Manhã */}
+          {/* Níveis de energia do dia - Simplificado */}
           <div className="mb-8">
             <h3 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-4">
-              Níveis de Energia - Manhã
+              Níveis de Energia por Período
             </h3>
             
-            <EnergySlider 
-              name="early_morning_energy" 
-              value={profile.early_morning_energy} 
-              onChange={handleChange} 
-              label="Início da manhã (5h-8h)" 
-              description="Configure seu nível de energia no início da manhã"
-            />
-            
-            <EnergySlider 
-              name="mid_morning_energy" 
-              value={profile.mid_morning_energy} 
-              onChange={handleChange} 
-              label="Meio da manhã (8h-11h)" 
-              description="Configure seu nível de energia no meio da manhã"
-            />
-            
-            <EnergySlider 
-              name="late_morning_energy" 
-              value={profile.late_morning_energy} 
-              onChange={handleChange} 
-              label="Final da manhã (11h-14h)" 
-              description="Configure seu nível de energia no final da manhã"
-            />
+            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg mb-4">
+              <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+                Configure seu nível típico de energia em diferentes momentos do dia:
+              </p>
+              
+              <EnergySlider 
+                name="morning_energy" 
+                value={profile.morning_energy} 
+                onChange={handleChange} 
+                label="Manhã (5h-12h)" 
+                description="Sua energia durante a manhã"
+              />
+              
+              <EnergySlider 
+                name="afternoon_energy" 
+                value={profile.afternoon_energy} 
+                onChange={handleChange} 
+                label="Tarde (12h-18h)" 
+                description="Sua energia durante a tarde"
+              />
+              
+              <EnergySlider 
+                name="evening_energy" 
+                value={profile.evening_energy} 
+                onChange={handleChange} 
+                label="Noite (18h-5h)" 
+                description="Sua energia durante a noite e madrugada"
+              />
+            </div>
           </div>
           
-          {/* Níveis de energia do dia - Tarde e Noite */}
+          {/* Modificadores de dia da semana - Simplificado */}
           <div className="mb-8">
             <h3 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-4">
-              Níveis de Energia - Tarde e Noite
-            </h3>
-            
-            <EnergySlider 
-              name="early_afternoon_energy" 
-              value={profile.early_afternoon_energy} 
-              onChange={handleChange} 
-              label="Início da tarde (14h-17h)" 
-              description="Configure seu nível de energia no início da tarde"
-            />
-            
-            <EnergySlider 
-              name="late_afternoon_energy" 
-              value={profile.late_afternoon_energy} 
-              onChange={handleChange} 
-              label="Final da tarde (17h-20h)" 
-              description="Configure seu nível de energia no final da tarde"
-            />
-            
-            <EnergySlider 
-              name="evening_energy" 
-              value={profile.evening_energy} 
-              onChange={handleChange} 
-              label="Noite (20h-23h)" 
-              description="Configure seu nível de energia durante a noite"
-            />
-            
-            <EnergySlider 
-              name="night_energy" 
-              value={profile.night_energy} 
-              onChange={handleChange} 
-              label="Madrugada (23h-5h)" 
-              description="Configure seu nível de energia durante a madrugada"
-            />
-          </div>
-          
-          {/* Modificadores de dia da semana */}
-          <div className="mb-8">
-            <h3 className="text-md font-medium text-gray-700 dark:text-gray-300 mb-4">
-              Diferenças por Dia da Semana
+              Variação por Dia da Semana
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              Ajuste como sua energia varia em dias específicos. Valores positivos indicam mais energia, negativos indicam menos energia.
+              Ajuste como sua energia varia entre dias úteis e finais de semana:
             </p>
             
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-              <WeekdayModifierNew 
-                day="monday_modifier"
-                value={profile.monday_modifier}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <DayModifier 
+                type="weekday_modifier"
+                value={profile.weekday_modifier}
                 onChange={handleChange}
               />
-              <WeekdayModifierNew 
-                day="tuesday_modifier"
-                value={profile.tuesday_modifier}
-                onChange={handleChange}
-              />
-              <WeekdayModifierNew 
-                day="wednesday_modifier"
-                value={profile.wednesday_modifier}
-                onChange={handleChange}
-              />
-              <WeekdayModifierNew 
-                day="thursday_modifier"
-                value={profile.thursday_modifier}
-                onChange={handleChange}
-              />
-              <WeekdayModifierNew 
-                day="friday_modifier"
-                value={profile.friday_modifier}
-                onChange={handleChange}
-              />
-              <WeekdayModifierNew 
-                day="saturday_modifier"
-                value={profile.saturday_modifier}
-                onChange={handleChange}
-              />
-              <WeekdayModifierNew 
-                day="sunday_modifier"
-                value={profile.sunday_modifier}
+              <DayModifier 
+                type="weekend_modifier"
+                value={profile.weekend_modifier}
                 onChange={handleChange}
               />
             </div>
