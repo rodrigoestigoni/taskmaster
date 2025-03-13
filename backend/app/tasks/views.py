@@ -416,15 +416,15 @@ class TaskViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             instance = self.get_object()
             
-            # Check if the task is completed and has an associated goal
+            # Verificar se a tarefa está concluída e tem meta associada
             if instance.status == 'completed' and instance.goal and instance.actual_value:
-                # Subtract the value from the goal
+                # Subtrair o valor da meta
                 goal = instance.goal
                 goal.current_value = max(0, goal.current_value - instance.actual_value)
                 goal.update_progress()
-                print(f"[TaskViewSet] Adjusting goal when deleting task: Subtracting {instance.actual_value} from goal {goal.id}")
+                print(f"[DEBUG] Ajustando meta ao excluir tarefa: Subtraindo {instance.actual_value} da meta {goal.id}")
             
-            # Delete the task
+            # Excluir a tarefa
             self.perform_destroy(instance)
         
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -963,59 +963,71 @@ class TaskViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
         """Retorna dados consolidados para o dashboard"""
+        # Tarefas hoje
         today = timezone.localdate()
+        tasks_today = self.get_queryset().filter(date=today)
         
         # Tarefas da semana
         start_of_week = today - timedelta(days=today.weekday())
         end_of_week = start_of_week + timedelta(days=6)
-        
-        # Obter contagens detalhadas para o gráfico de tendência
-        week_counts = count_tasks_with_recurrences(
-            request.user, 
-            date_range=(start_of_week, end_of_week)
-        )
-        
-        # Também obter dados específicos para a semana anterior para comparação
-        last_week_start = start_of_week - timedelta(days=7)
-        last_week_end = end_of_week - timedelta(days=7)
-        
-        # Estender o período para o gráfico de tendência (últimos 30 dias)
-        trend_start = today - timedelta(days=30)
-        trend_counts = count_tasks_with_recurrences(
-            request.user, 
-            date_range=(trend_start, today)
-        )
+        tasks_week = self.get_queryset().filter(date__range=[start_of_week, end_of_week])
         
         # Progresso das metas
         goals = Goal.objects.filter(user=request.user)
         active_goals = goals.filter(end_date__gte=today, is_completed=False)
         
-        # Formatando os dados para o serializer usando a função atualizada
-        today_stats = count_total_tasks(request.user, date=timezone.localdate())
-        week_stats = count_total_tasks(request.user, date_range=(start_of_week, end_of_week))
         
-        # Log para depuração
-        print(f"[DEBUG] today_stats: {today_stats}")
-        print(f"[DEBUG] week_stats: {week_stats}")
-        print(f"[DEBUG] today high_priority: {today_stats.get('high_priority', 0)}")
-        print(f"[DEBUG] week completion_rate: {week_stats.get('completion_rate', 0)}")
+        # Verificar utilizando as novas funções depois
+        # today_stats = count_total_tasks(request.user, date=timezone.localdate())
+        # week_stats = count_total_tasks(request.user, date_range=(start_of_week, end_of_week))
         
-        # Gerar resposta
+        # serializer = DashboardSerializer({
+        #     'today': today_stats,
+        #     'week': week_stats,
+        #     'goals': {
+        #         'total': goals.count(),
+        #         'active': active_goals.count(),
+        #         'completed': goals.filter(is_completed=True).count(),
+        #         'close_to_deadline': active_goals.filter(end_date__lte=today + timedelta(days=7)).count(),
+        #     },
+        #     'completion_trend': list(task_counts_by_day_formatter(trend_counts['by_day'], request.user)),
+        # })
+        
+        # Estatísticas de conclusão
+        tasks_last_30_days = self.get_queryset().filter(
+            date__range=[today - timedelta(days=30), today]
+        )
+        
+        completion_by_day = tasks_last_30_days.values('date').annotate(
+            total=Count('id'),
+            completed=Sum(Case(When(status='completed', then=1), default=0, output_field=IntegerField())),
+            rate=Sum(Case(When(status='completed', then=1), default=0, output_field=IntegerField())) * 100.0 / Count('id')
+        ).order_by('date')
+        
         serializer = DashboardSerializer({
-            'today': today_stats,
-            'week': week_stats,
+            'today': {
+                'total': tasks_today.count(),
+                'completed': tasks_today.filter(status='completed').count(),
+                'in_progress': tasks_today.filter(status='in_progress').count(),
+                'pending': tasks_today.filter(status='pending').count(),
+                'high_priority': tasks_today.filter(priority__gte=3).count(),
+            },
+            'week': {
+                'total': tasks_week.count(),
+                'completed': tasks_week.filter(status='completed').count(),
+                'completion_rate': tasks_week.filter(status='completed').count() * 100.0 / tasks_week.count() if tasks_week.count() > 0 else 0,
+            },
             'goals': {
                 'total': goals.count(),
                 'active': active_goals.count(),
                 'completed': goals.filter(is_completed=True).count(),
                 'close_to_deadline': active_goals.filter(end_date__lte=today + timedelta(days=7)).count(),
             },
-            # Usar o formatter atualizado com dados de tendência de 30 dias
-            'completion_trend': list(task_counts_by_day_formatter(trend_counts['by_day'], request.user)),
+            'completion_trend': list(completion_by_day),
         })
         
         return Response(serializer.data)
-
+    
     @action(detail=True, methods=['get'])
     def occurrence(self, request, pk=None):
         """Retorna a ocorrência de uma tarefa para uma data específica"""
@@ -1165,6 +1177,281 @@ class TaskViewSet(viewsets.ModelViewSet):
                 {'error': 'Modo de exclusão inválido'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+    
+    @action(detail=True, methods=['post'])
+    def update_status(self, request, pk=None):
+        """Atualizar status da tarefa"""
+        from django.db import transaction
+        
+        with transaction.atomic():
+            task = self.get_object()
+            status_value = request.data.get('status')
+            notes = request.data.get('notes')
+            actual_value = request.data.get('actual_value')
+            
+            print(f"[DEBUG] Atualizando status da tarefa {task.id} para {status_value}")
+            print(f"[DEBUG] Valor recebido: {actual_value}, Tipo: {type(actual_value)}")
+            print(f"[DEBUG] Meta associada: {task.goal.id if task.goal else 'Nenhuma'}")
+            
+            if status_value not in dict(Task.STATUS_CHOICES):
+                return Response({'error': 'Status inválido'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Verificar se está marcando como concluída
+            is_completing = status_value == 'completed'
+            
+            # Guardar valores antigos para comparação
+            old_status = task.status
+            old_actual_value = task.actual_value or 0
+            was_already_completed = old_status == 'completed'
+            
+            # Para tarefas recorrentes, criar uma ocorrência
+            if task.repeat_pattern != 'none':
+                occurrence_date = request.data.get('date', timezone.localdate())
+                
+                occurrence, created = TaskOccurrence.objects.get_or_create(
+                    task=task,
+                    date=occurrence_date,
+                    defaults={
+                        'status': status_value,
+                        'actual_value': actual_value,
+                        'notes': notes
+                    }
+                )
+                
+                if not created:
+                    # Guardar valores antigos para comparação
+                    old_occurrence_status = occurrence.status
+                    old_occurrence_value = occurrence.actual_value or 0
+                    was_already_completed = old_occurrence_status == 'completed'
+                    
+                    # Atualizar a ocorrência
+                    occurrence.status = status_value
+                    occurrence.actual_value = actual_value
+                    occurrence.notes = notes
+                    
+                    # Atualizar meta associada
+                    if task.goal:
+                        # Caso 1: Estava concluída e continua, mas valor mudou
+                        if was_already_completed and is_completing and old_occurrence_value != (actual_value or 0):
+                            diff = (actual_value or 0) - old_occurrence_value
+                            if diff != 0:
+                                task.goal.current_value += diff
+                                task.goal.update_progress()
+                                print(f"[DEBUG] Ajustando meta (ocorrência): {diff} na meta {task.goal.id}")
+                        
+                        # Caso 2: Estava concluída mas não está mais
+                        elif was_already_completed and not is_completing:
+                            task.goal.current_value = max(0, task.goal.current_value - old_occurrence_value)
+                            task.goal.update_progress()
+                            print(f"[DEBUG] Removendo valor da meta (ocorrência): {old_occurrence_value} da meta {task.goal.id}")
+                        
+                        # Caso 3: Não estava concluída mas agora está
+                        elif not was_already_completed and is_completing and actual_value is not None:
+                            # Converter para float se for string
+                            actual_value_float = actual_value
+                            if isinstance(actual_value, str):
+                                try:
+                                    actual_value_float = float(actual_value)
+                                except ValueError:
+                                    return Response({'error': 'Valor inválido'}, status=status.HTTP_400_BAD_REQUEST)
+                            
+                            task.goal.current_value += actual_value_float
+                            task.goal.update_progress()
+                            print(f"[DEBUG] Adicionando valor à meta (ocorrência): {actual_value_float} à meta {task.goal.id}")
+                    
+                    occurrence.save()
+                else:
+                    # Nova ocorrência, se está marcada como concluída
+                    if is_completing and task.goal and actual_value is not None:
+                        # Converter para float se for string
+                        actual_value_float = actual_value
+                        if isinstance(actual_value, str):
+                            try:
+                                actual_value_float = float(actual_value)
+                            except ValueError:
+                                return Response({'error': 'Valor inválido'}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        task.goal.current_value += actual_value_float
+                        task.goal.update_progress()
+                        print(f"[DEBUG] Nova ocorrência concluída: {actual_value_float} adicionado à meta {task.goal.id}")
+                
+                serializer = TaskOccurrenceSerializer(occurrence)
+                return Response(serializer.data)
+            else:
+                # Para tarefas não recorrentes
+                
+                # Atualizar a tarefa
+                task.status = status_value
+                if actual_value is not None:
+                    task.actual_value = actual_value
+                if notes:
+                    task.notes = notes
+                
+                # Atualizar meta associada
+                if task.goal:
+                    # Caso 1: Estava concluída e continua, mas valor mudou
+                    if was_already_completed and is_completing and old_actual_value != (actual_value or 0):
+                        diff = (actual_value or 0) - old_actual_value
+                        if diff != 0:
+                            task.goal.current_value += diff
+                            task.goal.update_progress()
+                            print(f"[DEBUG] Ajustando meta: {diff} adicionado à meta {task.goal.id}")
+                    
+                    # Caso 2: Estava concluída mas não está mais
+                    elif was_already_completed and not is_completing:
+                        task.goal.current_value = max(0, task.goal.current_value - old_actual_value)
+                        task.goal.update_progress()
+                        print(f"[DEBUG] Removendo valor da meta: {old_actual_value} removido da meta {task.goal.id}")
+                    
+                    # Caso 3: Não estava concluída mas agora está
+                    elif not was_already_completed and is_completing and actual_value is not None:
+                        # Converter para float se for string
+                        actual_value_float = actual_value
+                        if isinstance(actual_value, str):
+                            try:
+                                actual_value_float = float(actual_value)
+                            except ValueError:
+                                return Response({'error': 'Valor inválido'}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        task.goal.current_value += actual_value_float
+                        task.goal.update_progress()
+                        print(f"[DEBUG] Adicionando valor à meta: {actual_value_float} adicionado à meta {task.goal.id}")
+                
+                task.save()
+                
+                serializer = self.get_serializer(task)
+                return Response(serializer.data)
+            
+    @action(detail=False, methods=['get'])
+    def energy_recommendations(self, request):
+        """Retorna tarefas recomendadas com base no nível de energia atual"""
+        try:
+            current_energy = EnergyMatchService.get_current_energy_level(request.user)
+            recommended_tasks = EnergyMatchService.get_recommended_tasks(request.user)
+            
+            serializer = self.get_serializer(recommended_tasks, many=True)
+            
+            return Response({
+                'current_energy_level': current_energy,
+                'recommended_tasks': serializer.data
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def create(self, request, *args, **kwargs):
+        """Criar tarefa com verificação de sobreposição"""
+        # Verificar sobreposição de horários
+        date = request.data.get('date')
+        start_time = request.data.get('start_time')
+        end_time = request.data.get('end_time')
+        
+        # Adicionar um parâmetro opcional para ignorar a verificação de sobreposição
+        ignore_overlap = request.query_params.get('ignore_overlap', 'false').lower() == 'true'
+        
+        if not ignore_overlap and date and start_time and end_time:
+            overlapping_task = check_task_overlap(
+                user=request.user,
+                date=date,
+                start_time=start_time,
+                end_time=end_time
+            )
+            
+            if overlapping_task:
+                # Retornar erro com detalhes da sobreposição
+                return Response({
+                    'error': 'Sobreposição de horário detectada',
+                    'overlapping_task': {
+                        'id': overlapping_task.id,
+                        'title': overlapping_task.title,
+                        'start_time': overlapping_task.start_time,
+                        'end_time': overlapping_task.end_time,
+                        'date': overlapping_task.date
+                    }
+                }, status=status.HTTP_409_CONFLICT)
+        
+        # Se não houver sobreposição ou se for para ignorar, continuar com a criação
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        from django.db import transaction
+        
+        with transaction.atomic():
+            instance = self.get_object()
+            
+            # Salvar valores antigos
+            old_status = instance.status
+            old_actual_value = instance.actual_value or 0
+            old_goal_id = instance.goal.id if instance.goal else None
+            
+            # Atualizar a tarefa
+            serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            
+            # A partir daqui, instance já está atualizado com os novos valores
+            
+            # Verificar se houve alteração relevante para a meta
+            if instance.goal:
+                # Caso 1: Mesma meta, verifica mudanças de valor ou status
+                if old_goal_id == instance.goal.id:
+                    if old_status == 'completed' and instance.status == 'completed' and instance.actual_value != old_actual_value:
+                        # Ajustar a diferença
+                        diff = (instance.actual_value or 0) - old_actual_value
+                        if diff != 0:
+                            goal = instance.goal
+                            goal.current_value += diff
+                            goal.update_progress()
+                            print(f"[DEBUG] Ajustando meta: {diff} adicionado à meta {goal.id}. Valor atual: {goal.current_value}")
+                    elif old_status == 'completed' and instance.status != 'completed':
+                        # Tarefa não está mais concluída, remover valor
+                        goal = instance.goal
+                        goal.current_value = max(0, goal.current_value - old_actual_value)
+                        goal.update_progress()
+                        print(f"[DEBUG] Removendo valor da meta: {old_actual_value} removido da meta {goal.id}")
+                    elif old_status != 'completed' and instance.status == 'completed' and instance.actual_value:
+                        # Tarefa agora está concluída, adicionar valor
+                        goal = instance.goal
+                        goal.current_value += instance.actual_value
+                        goal.update_progress()
+                        print(f"[DEBUG] Adicionando valor à meta: {instance.actual_value} adicionado à meta {goal.id}")
+                # Caso 2: Mudou de meta
+                elif old_goal_id:
+                    from .models import Goal
+                    old_goal = Goal.objects.get(id=old_goal_id)
+                    # Remover da meta antiga se estava concluída
+                    if old_status == 'completed' and old_actual_value:
+                        old_goal.current_value = max(0, old_goal.current_value - old_actual_value)
+                        old_goal.update_progress()
+                        print(f"[DEBUG] Removendo da meta antiga: {old_actual_value} removido da meta {old_goal_id}")
+                    
+                    # Adicionar à nova meta se está concluída
+                    if instance.status == 'completed' and instance.actual_value:
+                        instance.goal.current_value += instance.actual_value
+                        instance.goal.update_progress()
+                        print(f"[DEBUG] Adicionando à nova meta: {instance.actual_value} adicionado à meta {instance.goal.id}")
+            
+            # Se a tarefa tinha meta e agora não tem mais
+            elif old_goal_id and old_status == 'completed' and old_actual_value:
+                from .models import Goal
+                old_goal = Goal.objects.get(id=old_goal_id)
+                old_goal.current_value = max(0, old_goal.current_value - old_actual_value)
+                old_goal.update_progress()
+                print(f"[DEBUG] Removendo meta da tarefa: {old_actual_value} removido da meta {old_goal_id}")
+            
+            return Response(serializer.data)
+    
+    @action(detail=True, methods=['put'])
+    def edit_recurring(self, request, pk=None):
+        """Endpoint específico para editar tarefas recorrentes"""
+        instance = self.get_object()
+        mode = request.query_params.get('mode', 'only_this')
+        occurrence_date = request.query_params.get('date')
+        
+        return self.update_recurring_task(instance, request, mode, occurrence_date)
             
             
 class EnergyProfileViewSet(viewsets.ModelViewSet):

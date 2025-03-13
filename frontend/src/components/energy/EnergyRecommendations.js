@@ -29,7 +29,9 @@ const EnergyRecommendations = () => {
       }
       
       // Now get recommendations
+      console.log('Fetching energy recommendations...');
       const response = await TaskService.getEnergyRecommendations();
+      console.log('Raw energy recommendations response:', response);
       
       // Check if we got data in the expected format
       if (!response.data || !response.data.recommended_tasks) {
@@ -39,9 +41,16 @@ const EnergyRecommendations = () => {
         return;
       }
       
+      console.log('Current energy level from API:', response.data.current_energy_level);
+      console.log('Recommended tasks:', response.data.recommended_tasks);
+      
       // Check if there are any recommendations
       if (response.data.recommended_tasks.length === 0) {
-        setError('Não há tarefas disponíveis para recomendação. Certifique-se de ter tarefas pendentes hoje com níveis de energia definidos.');
+        setError(
+          'Não foram encontradas tarefas para recomendar. Para receber recomendações, você precisa:' +
+          '\n1. Ter tarefas pendentes programadas para hoje' +
+          '\n2. Definir níveis de energia para suas tarefas ao criá-las'
+        );
       } else {
         setRecommendations(response.data.recommended_tasks);
         setCurrentEnergy(response.data.current_energy_level || 5);

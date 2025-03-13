@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Link, useLocation } from 'react-router-dom';
-import { format, addDays, subDays, parseISO, parse } from 'date-fns';
+import { Menu, Transition } from '@headlessui/react';
+import { format, addDays, subDays, parseISO, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   ChevronLeftIcon, 
@@ -10,16 +11,15 @@ import {
   CheckIcon,
   FaceFrownIcon,
   HandThumbDownIcon,
-  XMarkIcon,
   DocumentTextIcon,
   ClockIcon,
-  PauseIcon,
   PlayIcon,
   PencilIcon,
   TrashIcon,
   PlusIcon,
   ArrowPathIcon,
   FunnelIcon,
+  EllipsisHorizontalIcon,
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 
@@ -31,12 +31,18 @@ import EmptyState from '../components/common/EmptyState';
 import TaskCompletionModal from '../components/common/TaskCompletionModal';
 import DeleteTaskModal from '../components/common/DeleteTaskModal';
 import TimeBlockingScheduler from '../components/common/TimeBlockingScheduler';
+import MobileBottomNav from '../components/layout/MobileBottomNav';
+import MobileHeader from '../components/layout/MobileHeader';
+import MobileTaskCard from '../components/tasks/MobileTaskCard';
 
 export default function DayView() {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const dateParam = queryParams.get('date');
   const [showTimeBlocker, setShowTimeBlocker] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const [taskContextMenu, setTaskContextMenu] = useState(null);
   
   const [selectedDate, setSelectedDate] = useState(
     dateParam ? parseISO(dateParam) : new Date()
@@ -45,6 +51,7 @@ export default function DayView() {
   const [filteredTasks, setFilteredTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const { updateTaskStatus } = useTasks();
+  const pageRef = useRef(null);
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
@@ -77,6 +84,11 @@ export default function DayView() {
     // Aplicar filtros quando as tarefas ou filtros mudarem
     applyFilters();
   }, [tasks, statusFilter]);
+
+  // Função para determinar se é uma visualização mobile
+  const isMobile = () => {
+    return window.innerWidth < 768;
+  };
   
   const fetchTasks = async () => {
     setLoading(true);
@@ -156,37 +168,54 @@ export default function DayView() {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     
-    // Se não tem meta ou não está sendo concluída, proceder normalmente
     try {
-      // Obtenha o token de autenticação
-      const token = localStorage.getItem('accessToken');
+      console.log(`Atualizando status da tarefa ${taskId}:`, { newStatus, actualValue, notes });
       
-      // Prepare os dados da requisição
-      const data = {
-        status: newStatus,
-        date: format(selectedDate, 'yyyy-MM-dd')
-      };
+      // Determinar como chamar o updateTaskStatus com base no que foi passado
+      let statusData;
       
-      // Adicione valores opcionais se fornecidos
-      if (actualValue !== null) data.actual_value = actualValue;
-      if (notes) data.notes = notes;
-      
-      // Faça a requisição diretamente com axios
-      await axios.post(
-        `/api/tasks/${taskId}/update_status/`,
-        data,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
+      if (typeof newStatus === 'object') {
+        // Se newStatus já é um objeto, usá-lo diretamente
+        statusData = newStatus;
+        
+        // Adicionar notes se fornecido
+        if (notes) {
+          statusData.notes = notes;
         }
-      );
+      } else {
+        // Se newStatus é uma string, criar um objeto
+        statusData = { status: newStatus };
+        
+        // Adicionar actual_value se fornecido
+        if (actualValue !== null && actualValue !== undefined) {
+          statusData.actual_value = actualValue;
+        }
+        
+        // Adicionar notes se fornecido
+        if (notes) {
+          statusData.notes = notes;
+        }
+        
+        // Adicionar a data atual se não estiver presente
+        if (!statusData.date) {
+          statusData.date = format(selectedDate, 'yyyy-MM-dd');
+        }
+      }
+      
+      console.log("Chamando TaskService.updateTaskStatus com:", taskId, statusData);
+      
+      // Chamar método do serviço
+      await TaskService.updateTaskStatus(taskId, statusData);
+      
+      // Feedback tátil em dispositivos móveis
+      if (navigator.vibrate) {
+        navigator.vibrate(80);
+      }
       
       // Atualize imediatamente o estado local
       setTasks(prevTasks => 
         prevTasks.map(t => 
-          t.id === taskId ? { ...t, status: newStatus } : t
+          t.id === taskId ? { ...t, status: typeof newStatus === 'string' ? newStatus : newStatus.status } : t
         )
       );
       
@@ -262,6 +291,29 @@ export default function DayView() {
     }
   };
   
+  // Função de agendamento de tarefas para o TimeBlockingScheduler
+  const handleScheduleTask = async (taskId, startTime, endTime) => {
+    try {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) {
+        console.error(`Task with ID ${taskId} not found`);
+        return;
+      }
+      
+      await TaskService.updateTask(taskId, {
+        ...task,
+        start_time: startTime,
+        end_time: endTime
+      });
+      
+      toast.success('Tarefa agendada com sucesso!');
+      fetchTasks(); // Recarregar tarefas
+    } catch (error) {
+      console.error('Error scheduling task:', error);
+      toast.error('Erro ao agendar tarefa');
+    }
+  };
+  
   const formatTime = (timeString) => {
     const [hours, minutes] = timeString.split(':');
     return `${hours}:${minutes}`;
@@ -295,11 +347,10 @@ export default function DayView() {
   
   // Renderiza o card de uma tarefa
   const renderTaskCard = (task) => {
-    console.log(`Renderizando tarefa (id=${task.id}): status=${task.status}`);
     const startTime = formatTime(task.start_time);
     const endTime = formatTime(task.end_time);
 
-    const isToday = task.date ? format(parseISO(task.date), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') : true;
+    const isTaskToday = task.date ? format(parseISO(task.date), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') : true;
 
     const isCompleted = task.status === 'completed';
     
@@ -359,14 +410,13 @@ export default function DayView() {
             style={{ backgroundColor: `${categoryColor}20`, color: categoryColor }}
           >
             {task.category_name}
-            {console.log(task)}
           </span>
           <TaskStatusBadge status={task.status} />
         </div>
           
           <div className="flex space-x-2 gap-6 mt-3">
             {/* Botões para alterar status - mostrar apenas para tarefas de hoje que não estão concluídas */}
-            {isToday && !isCompleted ? (
+            {isTaskToday && !isCompleted ? (
               <>
                 <button
                   onClick={() => {
@@ -408,7 +458,7 @@ export default function DayView() {
                   <HandThumbDownIcon className="h-4 w-4" aria-hidden="true" />
                 </button>
               </>
-            ) : isToday && isCompleted ? (
+            ) : isTaskToday && isCompleted ? (
               // Para tarefas concluídas, mostrar uma mensagem ou apenas deixar vazio
               <span className="text-xs text-green-600 dark:text-green-400 flex items-center">
                 <CheckIcon className="h-4 w-4 mr-1" />
@@ -450,12 +500,6 @@ export default function DayView() {
             </Link>
           </div>
         </div>
-        <DeleteTaskModal
-          isOpen={deleteModalOpen}
-          onClose={() => setDeleteModalOpen(false)}
-          onConfirm={handleDeleteConfirm}
-          isRecurring={taskToDelete?.repeat_pattern && taskToDelete.repeat_pattern !== 'none'}
-        />
       </div>
     );
   };
@@ -471,160 +515,313 @@ export default function DayView() {
           <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 ml-2">{title}</h2>
         </div>
         <div className="space-y-3">
-          {tasks.map(task => renderTaskCard(task))}
+          {isMobile() 
+            ? tasks.map(task => (
+                <MobileTaskCard
+                  key={task.id}
+                  task={task}
+                  onStatusChange={(taskId, statusData) => {
+                    console.log("MobileTaskCard -> handleStatusChange:", taskId, statusData);
+                    handleStatusChange(taskId, statusData);
+                  }}
+                  onDelete={(task) => {
+                    console.log("MobileTaskCard -> handleDeleteTask:", task.id);
+                    handleDeleteTask(task.id);
+                  }}
+                />
+              ))
+            : tasks.map(task => renderTaskCard(task))
+          }
         </div>
       </div>
     );
   };
   
   return (
-    <div>
-      {/* Date navigation */}
-      <div className="mb-6">
-        {/* Date selector and navigation */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2 sm:space-x-4">
+    <div 
+      ref={pageRef}
+      className="pb-20 md:pb-0" // Espaço para a navbar inferior em mobile
+    >
+      {/* Mobile responsive header */}
+      {isMobile() ? (
+        <MobileHeader 
+          title={isToday(selectedDate) ? 'Hoje' : format(selectedDate, 'dd/MM')}
+          onPrevious={handlePreviousDay}
+          onNext={handleNextDay}
+          onToday={handleToday}
+          onMoreClick={() => setShowActionsMenu(!showActionsMenu)}
+        />
+      ) : (
+        /* Desktop header */
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={handlePreviousDay}
+                className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
+              </button>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{displayDate}</h1>
+              <button
+                onClick={handleNextDay}
+                className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                <ChevronRightIcon className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
             <button
-              onClick={handlePreviousDay}
-              className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              onClick={handleToday}
+              className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             >
-              <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
-            </button>
-            <h1 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">{displayDate}</h1>
-            <button
-              onClick={handleNextDay}
-              className="inline-flex items-center p-2 border border-transparent rounded-full shadow-sm text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-            >
-              <ChevronRightIcon className="h-5 w-5" aria-hidden="true" />
+              <span>Hoje</span>
             </button>
           </div>
-          <button
-            onClick={handleToday}
-            className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            <span>Hoje</span>
-          </button>
-        </div>
-        
-        {/* Action buttons - placed in a scrollable row on mobile if needed */}
-        <div className="flex flex-wrap gap-2 items-center justify-start">
-          <button
-            onClick={fetchTasks}
-            className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-          >
-            <ArrowPathIcon className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">Atualizar</span>
-          </button>
           
-          <div className="relative">
+          {/* Action buttons - placed in a scrollable row on mobile if needed */}
+          <div className="flex flex-wrap gap-2 items-center justify-start">
             <button
-              onClick={() => setShowFilterMenu(!showFilterMenu)}
-              className={`inline-flex items-center px-3 py-1.5 border ${isFilterActive() ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-300' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'} shadow-sm text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500`}
+              onClick={fetchTasks}
+              className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
             >
-              <FunnelIcon className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Filtrar</span>
-              {isFilterActive() && (
-                <span className="ml-1 w-2 h-2 rounded-full bg-primary-500"></span>
-              )}
+              <ArrowPathIcon className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Atualizar</span>
             </button>
             
-            {showFilterMenu && (
-              <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-10">
-                <div className="py-1 divide-y divide-gray-200 dark:divide-gray-700">
-                  <div className="px-4 py-2">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white">Filtrar por status</h3>
-                    <div className="mt-2 space-y-2">
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={statusFilter.pending}
-                          onChange={() => toggleStatusFilter('pending')}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Pendente</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={statusFilter.in_progress}
-                          onChange={() => toggleStatusFilter('in_progress')}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Em andamento</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={statusFilter.completed}
-                          onChange={() => toggleStatusFilter('completed')}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Concluída</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={statusFilter.failed}
-                          onChange={() => toggleStatusFilter('failed')}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Falhou</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={statusFilter.skipped}
-                          onChange={() => toggleStatusFilter('skipped')}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
-                        />
-                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Pulada</span>
-                      </label>
+            <div className="relative">
+              <button
+                onClick={() => setShowFilterMenu(!showFilterMenu)}
+                className={`inline-flex items-center px-3 py-1.5 border ${isFilterActive() ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900 dark:text-primary-300' : 'border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'} shadow-sm text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500`}
+              >
+                <FunnelIcon className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">Filtrar</span>
+                {isFilterActive() && (
+                  <span className="ml-1 w-2 h-2 rounded-full bg-primary-500"></span>
+                )}
+              </button>
+              
+              {showFilterMenu && (
+                <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-10">
+                  <div className="py-1 divide-y divide-gray-200 dark:divide-gray-700">
+                    <div className="px-4 py-2">
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-white">Filtrar por status</h3>
+                      <div className="mt-2 space-y-2">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={statusFilter.pending}
+                            onChange={() => toggleStatusFilter('pending')}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                          />
+                          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Pendente</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={statusFilter.in_progress}
+                            onChange={() => toggleStatusFilter('in_progress')}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                          />
+                          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Em andamento</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={statusFilter.completed}
+                            onChange={() => toggleStatusFilter('completed')}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                          />
+                          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Concluída</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={statusFilter.failed}
+                            onChange={() => toggleStatusFilter('failed')}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                          />
+                          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Falhou</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={statusFilter.skipped}
+                            onChange={() => toggleStatusFilter('skipped')}
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                          />
+                          <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Pulada</span>
+                        </label>
+                      </div>
+                    </div>
+                    <div className="px-4 py-2">
+                      <button
+                        onClick={() => {
+                          showActiveTasksOnly();
+                          setShowFilterMenu(false);
+                        }}
+                        className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+                      >
+                        Mostrar apenas tarefas ativas
+                      </button>
+                    </div>
+                    <div className="px-4 py-2">
+                      <button
+                        onClick={() => {
+                          resetFilters();
+                          setShowFilterMenu(false);
+                        }}
+                        className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+                      >
+                        Limpar filtros
+                      </button>
                     </div>
                   </div>
-                  <div className="px-4 py-2">
+                </div>
+              )}
+            </div>
+            
+            <Link
+              to="/task/new"
+              className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            >
+              <PlusIcon className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Nova Tarefa</span>
+            </Link>
+            
+            <button
+              onClick={() => setShowTimeBlocker(!showTimeBlocker)}
+              className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            >
+              <ClockIcon className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">{showTimeBlocker ? 'Ocultar Agenda' : 'Planejador'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile action menu - separado em botões claros em vez de swipe/menus */}
+      {isMobile() && (
+      <div className="flex justify-between items-center px-4 py-2 mb-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+        <div className="flex space-x-2">
+          <button
+            onClick={fetchTasks}
+            className="flex items-center justify-center p-2 rounded-full bg-white dark:bg-gray-700 shadow-sm"
+          >
+            <ArrowPathIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+          </button>
+          
+          {/* Menu de filtro em dropdown */}
+          <Menu as="div" className="relative">
+            <Menu.Button
+              className={`flex items-center justify-center p-2 rounded-full ${
+                isFilterActive() 
+                  ? 'bg-primary-100 text-primary-600 dark:bg-primary-900 dark:text-primary-300' 
+                  : 'bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+              } shadow-sm`}
+            >
+              <FunnelIcon className="h-5 w-5" />
+              {isFilterActive() && (
+                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-primary-500"></span>
+              )}
+            </Menu.Button>
+            
+            <Transition
+              enter="transition ease-out duration-100"
+              enterFrom="transform opacity-0 scale-95"
+              enterTo="transform opacity-100 scale-100"
+              leave="transition ease-in duration-75"
+              leaveFrom="transform opacity-100 scale-100"
+              leaveTo="transform opacity-0 scale-95"
+            >
+              <Menu.Items className="absolute left-0 mt-2 w-56 origin-top-left bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
+                <div className="px-4 py-2">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white">Filtrar por status</h3>
+                  <div className="mt-2 space-y-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={statusFilter.pending}
+                        onChange={() => toggleStatusFilter('pending')}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Pendente</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={statusFilter.in_progress}
+                        onChange={() => toggleStatusFilter('in_progress')}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Em andamento</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={statusFilter.completed}
+                        onChange={() => toggleStatusFilter('completed')}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Concluída</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={statusFilter.failed}
+                        onChange={() => toggleStatusFilter('failed')}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Falhou</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={statusFilter.skipped}
+                        onChange={() => toggleStatusFilter('skipped')}
+                        className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700"
+                      />
+                      <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Pulada</span>
+                    </label>
+                  </div>
+                  
+                  <div className="mt-4 pt-2 border-t border-gray-200 dark:border-gray-700">
                     <button
-                      onClick={() => {
-                        showActiveTasksOnly();
-                        setShowFilterMenu(false);
-                      }}
-                      className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+                      onClick={showActiveTasksOnly}
+                      className="w-full text-left text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 py-1"
                     >
                       Mostrar apenas tarefas ativas
                     </button>
-                  </div>
-                  <div className="px-4 py-2">
                     <button
-                      onClick={() => {
-                        resetFilters();
-                        setShowFilterMenu(false);
-                      }}
-                      className="text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300"
+                      onClick={resetFilters}
+                      className="w-full text-left text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 py-1"
                     >
                       Limpar filtros
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-          
+              </Menu.Items>
+            </Transition>
+          </Menu>
+        </div>
+        
+        <div className="flex space-x-2">
           <Link
             to="/task/new"
-            className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            className="flex items-center px-3 py-1.5 rounded-md bg-primary-600 text-white shadow-sm"
           >
-            <PlusIcon className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">Nova Tarefa</span>
+            <PlusIcon className="h-4 w-4 mr-1" />
+            <span>Nova</span>
           </Link>
           
           <button
             onClick={() => setShowTimeBlocker(!showTimeBlocker)}
-            className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            className="flex items-center justify-center p-2 rounded-full bg-white dark:bg-gray-700 shadow-sm"
           >
-            <ClockIcon className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">{showTimeBlocker ? 'Ocultar Agenda' : 'Planejador'}</span>
+            <ClockIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
           </button>
         </div>
       </div>
+    )}
       
       {/* Content */}
       {loading ? (
@@ -640,7 +837,7 @@ export default function DayView() {
           icon={<CalendarIcon className="h-12 w-12 text-gray-400" />}
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-6 px-4 md:px-0">
           {/* Morning tasks */}
           {renderTaskSection(
             'Manhã (5h - 12h)', 
@@ -686,33 +883,12 @@ export default function DayView() {
           )}
         </div>
       )}
+      
       {showTimeBlocker && (
-        <div className="mt-4 mb-6">
-          {console.log(`Rendering TimeBlockingScheduler with ${tasks.length} tasks for date: ${format(selectedDate, 'yyyy-MM-dd')}`)}
+        <div className="mt-4 mb-6 overflow-x-auto">
           <TimeBlockingScheduler
             tasks={tasks}
-            onScheduleTask={async (taskId, startTime, endTime) => {
-              try {
-                console.log(`Scheduling task ${taskId} from ${startTime} to ${endTime}`);
-                const task = tasks.find(t => t.id === taskId);
-                if (!task) {
-                  console.error(`Task with ID ${taskId} not found`);
-                  return;
-                }
-                
-                await TaskService.updateTask(taskId, {
-                  ...task,
-                  start_time: startTime,
-                  end_time: endTime
-                });
-                
-                toast.success('Tarefa agendada com sucesso!');
-                fetchTasks(); // Recarregar tarefas
-              } catch (error) {
-                console.error('Error scheduling task:', error);
-                toast.error('Erro ao agendar tarefa');
-              }
-            }}
+            onScheduleTask={handleScheduleTask}
             onDetectConflict={(task, conflict) => {
               toast.warning(`Conflito detectado com a tarefa "${conflict.title}"`);
             }}
@@ -735,6 +911,9 @@ export default function DayView() {
         onConfirm={handleCompletionConfirm}
         task={taskToComplete}
       />
+      
+      {/* Bottom Navigation for Mobile */}
+      {isMobile() && <MobileBottomNav />}
     </div>
   );
 }
